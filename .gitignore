@@ -46,3 +46,6 @@ Desktop.ini
 .DS_Store
 
 tools/tailwindcss-windows-x64.exe
+standup.db
+standup.db-shm
+standup.db-wal
