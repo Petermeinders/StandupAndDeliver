@@ -1,0 +1,39 @@
+# Build results
+bin/
+obj/
+TestResults/
+coverage/
+
+# Visual Studio / Rider / VS Code local settings
+.vs/
+.idea/
+.vscode/
+
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.sln.ide
+*.cache
+
+# .NET / VS
+*.csproj.user
+
+# Publish output
+publish/
+Publish/
+
+# App configuration (avoid committing environment-specific or secret config)
+appsettings.Development.json
+appsettings.Local.json
+secrets.json
+
+# Common local environment files
+.env
+.env.*
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
