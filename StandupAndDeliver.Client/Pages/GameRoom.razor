@@ -1,5 +1,5 @@
 @page "/room"
-@rendermode InteractiveWebAssembly
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
 @inject GameStateService GameState
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -40,7 +40,8 @@ else
         case GamePhase.SpeakerTurn:
             @if (GameState.State?.ActivePlayerName == GameState.PlayerName)
             {
-                <SpeakerView SkipTurnFunc="SkipTurn" />
+                <SpeakerView EndTurnFunc="EndTurn" PauseTurnFunc="PauseTurn"
+                             ResumeTurnFunc="ResumeTurn" SkipTurnFunc="SkipTurn" />
             }
             else
             {
@@ -49,11 +50,15 @@ else
             break;
 
         case GamePhase.Voting:
-            <VotingView SubmitVoteFunc="SubmitVote" />
+            <VotingView SubmitImpressivenessFunc="SubmitImpressiveness" />
             break;
 
         case GamePhase.Reveal:
-            <RevealView AdvanceTurnFunc="AdvanceTurn" />
+            <RevealView SubmitLieVoteFunc="SubmitLieVote" />
+            break;
+
+        case GamePhase.Results:
+            <ResultsView AdvanceTurnFunc="AdvanceTurn" />
             break;
 
         case GamePhase.GameOver:
@@ -62,7 +67,7 @@ else
 
         default:
             <div class="min-h-screen bg-gray-950 text-white flex items-center justify-center">
-                <p class="text-gray-400">Phase: @GameState.State?.Phase — coming soon</p>
+                <p class="text-gray-400">Phase: @GameState.State?.Phase</p>
             </div>
             break;
     }
@@ -141,13 +146,9 @@ else
 
             HubResult result;
             if (Action == "create")
-            {
                 result = await _hub.InvokeAsync<HubResult>("CreateRoom", GameState.PlayerName);
-            }
             else if (Action == "join" && !string.IsNullOrEmpty(Code))
-            {
                 result = await _hub.InvokeAsync<HubResult>("JoinRoom", Code, GameState.PlayerName);
-            }
             else
             {
                 _fatalError = "Invalid room action.";
@@ -178,29 +179,29 @@ else
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task<HubResult> StartGame()
-    {
-        if (_hub is null) return new HubResult(false, "Not connected.");
-        return await _hub.InvokeAsync<HubResult>("StartGame");
-    }
+    private async Task<HubResult> StartGame() =>
+        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("StartGame");
 
-    private async Task<HubResult> SubmitVote(bool lied, int impressiveness)
-    {
-        if (_hub is null) return new HubResult(false, "Not connected.");
-        return await _hub.InvokeAsync<HubResult>("SubmitVote", lied, impressiveness);
-    }
+    private async Task<HubResult> EndTurn() =>
+        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("EndTurn");
 
-    private async Task<HubResult> AdvanceTurn()
-    {
-        if (_hub is null) return new HubResult(false, "Not connected.");
-        return await _hub.InvokeAsync<HubResult>("AdvanceTurn");
-    }
+    private async Task<HubResult> PauseTurn() =>
+        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("PauseTurn");
 
-    private async Task<HubResult> SkipTurn()
-    {
-        if (_hub is null) return new HubResult(false, "Not connected.");
-        return await _hub.InvokeAsync<HubResult>("SkipTurn");
-    }
+    private async Task<HubResult> ResumeTurn() =>
+        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("ResumeTurn");
+
+    private async Task<HubResult> SkipTurn() =>
+        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("SkipTurn");
+
+    private async Task<HubResult> SubmitImpressiveness(int rating) =>
+        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("SubmitImpressiveness", rating);
+
+    private async Task<HubResult> SubmitLieVote(bool lied) =>
+        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("SubmitLieVote", lied);
+
+    private async Task<HubResult> AdvanceTurn() =>
+        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("AdvanceTurn");
 
     private void GoHome()
     {

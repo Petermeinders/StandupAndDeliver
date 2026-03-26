@@ -24,8 +24,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddSignalR();
 builder.Services.AddHealthChecks();
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=standup.db";
-builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite(connectionString));
-builder.Services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite(connectionString));
+builder.Services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite(connectionString), ServiceLifetime.Singleton);
 builder.Services.AddSingleton<PromptCardService>();
 builder.Services.AddSingleton<GameRoomService>();
 builder.Services.AddSingleton<GameTimerService>();
@@ -33,9 +32,8 @@ builder.Services.AddHostedService<RoomCleanupService>();
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
+await using (var db = app.Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext())
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.EnsureCreatedAsync();
     await SeedData.SeedAsync(db);
 }

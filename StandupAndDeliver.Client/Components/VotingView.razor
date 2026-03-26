@@ -3,54 +3,41 @@
 <div class="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center p-6">
     <div class="w-full max-w-md">
 
-        <p class="text-center text-gray-400 text-sm uppercase tracking-widest mb-1">Voting</p>
+        <p class="text-center text-gray-600 text-xs font-mono mb-6">Room: @GameState.State?.RoomCode</p>
+
+        <p class="text-center text-gray-400 text-sm uppercase tracking-widest mb-1">Now speaking</p>
         <h2 class="text-2xl font-bold text-center mb-1">@GameState.State?.ActivePlayerName</h2>
-        <p class="text-center text-gray-500 text-sm mb-6">just delivered their standup</p>
+        <p class="text-center text-gray-500 text-sm mb-6">Rate their delivery before the card is revealed</p>
 
         @if (_isActiveSpeaker)
         {
             <div class="bg-gray-900 rounded-2xl p-8 text-center">
-                <p class="text-gray-400">Sit tight — others are voting on your performance.</p>
+                <p class="text-gray-400">Others are rating your performance…</p>
                 <p class="mt-4 text-sm text-gray-500">
-                    @GameState.State?.VotesSubmitted of @GameState.State?.VotesTotal votes submitted
+                    @GameState.State?.VotesSubmitted of @GameState.State?.VotesTotal ratings submitted
                 </p>
             </div>
         }
         else if (_submitted)
         {
             <div class="bg-gray-900 rounded-2xl p-8 text-center">
-                <p class="text-green-400 font-semibold mb-2">Vote submitted!</p>
+                <p class="text-green-400 font-semibold mb-2">Rating submitted!</p>
                 <p class="text-sm text-gray-500">
-                    @GameState.State?.VotesSubmitted of @GameState.State?.VotesTotal votes submitted
+                    @GameState.State?.VotesSubmitted of @GameState.State?.VotesTotal ratings submitted
                 </p>
+                <p class="mt-4 text-xs text-gray-600">The prompt card will be revealed once everyone has rated.</p>
             </div>
         }
         else
         {
-            <div class="bg-gray-900 rounded-2xl p-6 mb-4">
-                <p class="text-sm font-semibold text-gray-300 mb-3">Did they lie?</p>
-                <div class="flex gap-3">
-                    <button @onclick='() => _lied = true'
-                            class="flex-1 py-3 rounded-xl font-bold transition-all
-                                   @(_lied == true ? "bg-red-500 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700")">
-                        Lied
-                    </button>
-                    <button @onclick='() => _lied = false'
-                            class="flex-1 py-3 rounded-xl font-bold transition-all
-                                   @(_lied == false ? "bg-green-500 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700")">
-                        Didn't Lie
-                    </button>
-                </div>
-            </div>
-
             <div class="bg-gray-900 rounded-2xl p-6 mb-6">
-                <p class="text-sm font-semibold text-gray-300 mb-3">Impressiveness (1–5)</p>
+                <p class="text-sm font-semibold text-gray-300 mb-4">How impressive was that? (1–5)</p>
                 <div class="flex gap-2 justify-center">
                     @for (var i = 1; i <= 5; i++)
                     {
                         var score = i;
                         <button @onclick="() => _impressiveness = score"
-                                class="w-12 h-12 rounded-xl font-bold text-lg transition-all
+                                class="w-14 h-14 rounded-xl font-bold text-xl transition-all
                                        @(_impressiveness == score ? "bg-yellow-400 text-black" : "bg-gray-800 text-gray-400 hover:bg-gray-700")">
                             @score
                         </button>
@@ -59,12 +46,12 @@
             </div>
 
             <button @onclick="OnSubmit"
-                    disabled="@(_lied is null || _impressiveness is null || _submitting)"
+                    disabled="@(_impressiveness is null || _submitting)"
                     class="w-full py-4 rounded-xl font-bold text-lg transition-all
-                           @(_lied is null || _impressiveness is null
+                           @(_impressiveness is null
                                ? "bg-gray-700 text-gray-500 cursor-not-allowed"
                                : "bg-yellow-400 text-black hover:bg-yellow-300")">
-                @(_submitting ? "Submitting…" : "Submit Vote")
+                @(_submitting ? "Submitting…" : "Submit Rating")
             </button>
 
             @if (!string.IsNullOrEmpty(_error))
@@ -73,16 +60,15 @@
             }
 
             <p class="mt-4 text-center text-sm text-gray-600">
-                @GameState.State?.VotesSubmitted of @GameState.State?.VotesTotal votes submitted
+                @GameState.State?.VotesSubmitted of @GameState.State?.VotesTotal ratings submitted
             </p>
         }
     </div>
 </div>
 
 @code {
-    [Parameter, EditorRequired] public Func<bool, int, Task<HubResult>> SubmitVoteFunc { get; set; } = default!;
+    [Parameter, EditorRequired] public Func<int, Task<HubResult>> SubmitImpressivenessFunc { get; set; } = default!;
 
-    private bool? _lied;
     private int? _impressiveness;
     private bool _submitting;
     private bool _submitted;
@@ -96,14 +82,12 @@
 
     private async Task OnSubmit()
     {
-        if (_lied is null || _impressiveness is null) return;
+        if (_impressiveness is null) return;
         _submitting = true;
         _error = null;
-        var result = await SubmitVoteFunc(_lied.Value, _impressiveness.Value);
-        if (result.Success)
-            _submitted = true;
-        else
-            _error = result.Error;
+        var result = await SubmitImpressivenessFunc(_impressiveness.Value);
+        if (result.Success) _submitted = true;
+        else _error = result.Error;
         _submitting = false;
     }
 }

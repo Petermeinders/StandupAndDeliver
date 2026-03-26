@@ -11,6 +11,7 @@ public class GameRoom
     public DateTime LastActivity { get; set; } = DateTime.UtcNow;
     public int CurrentSpeakerIndex { get; set; }
     public HashSet<int> UsedCardIds { get; set; } = [];
-    public Dictionary<string, (bool Lied, int Impressiveness)> CurrentTurnVotes { get; set; } = [];
+    public Dictionary<string, int> CurrentTurnImpressiveness { get; set; } = [];
+    public Dictionary<string, bool> CurrentTurnLieVotes { get; set; } = [];
     public int? ActiveCardId { get; set; }
 }

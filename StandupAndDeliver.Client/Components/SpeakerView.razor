@@ -3,11 +3,13 @@
 <div class="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center p-6">
     <div class="w-full max-w-md">
 
+        <p class="text-center text-gray-600 text-xs font-mono mb-6">Room: @GameState.State?.RoomCode</p>
+
         <div class="text-center mb-6">
             <span class="text-xs font-semibold uppercase tracking-widest text-yellow-400">Your Turn</span>
             <div class="mt-2 flex items-center justify-center gap-2">
                 <span class="text-5xl font-mono font-bold @TimerColour">@GameState.SecondsRemaining</span>
-                <span class="text-gray-400 text-sm">sec</span>
+                <span class="text-gray-400 text-sm">@(_paused ? "paused" : "sec")</span>
             </div>
         </div>
 
@@ -18,32 +20,48 @@
             </div>
         }
 
-        <p class="text-center text-gray-400 text-sm">Deliver your best standup. Everyone is watching.</p>
+        <p class="text-center text-gray-400 text-sm mb-8">Deliver your best standup. Everyone is watching.</p>
+
+        <div class="flex gap-3 mb-3">
+            <button @onclick="OnPauseResume"
+                    class="flex-1 py-3 rounded-xl font-semibold transition-all
+                           @(_paused ? "bg-green-500 text-white hover:bg-green-400" : "bg-gray-700 text-gray-300 hover:bg-gray-600")">
+                @(_paused ? "Resume" : "Pause")
+            </button>
+            <button @onclick="OnDone" disabled="@_ending"
+                    class="flex-1 py-3 rounded-xl font-semibold bg-yellow-400 text-black hover:bg-yellow-300 transition-all">
+                @(_ending ? "…" : "Done")
+            </button>
+        </div>
 
         @if (_isHost)
         {
-            <div class="mt-8 text-center">
-                <button @onclick="OnSkip" disabled="@_skipping"
-                        class="px-6 py-2 rounded-xl text-sm font-semibold bg-gray-700 text-gray-300 hover:bg-gray-600 transition-all">
-                    @(_skipping ? "Skipping…" : "Skip Turn")
-                </button>
-                @if (!string.IsNullOrEmpty(_skipError))
-                {
-                    <p class="mt-2 text-red-400 text-sm">@_skipError</p>
-                }
-            </div>
+            <button @onclick="OnSkip" disabled="@_skipping"
+                    class="w-full py-2 rounded-xl text-sm font-semibold bg-gray-800 text-gray-400 hover:bg-gray-700 transition-all">
+                @(_skipping ? "Skipping…" : "Host: Skip Turn")
+            </button>
+        }
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <p class="mt-3 text-red-400 text-sm text-center">@_error</p>
         }
     </div>
 </div>
 
 @code {
+    [Parameter, EditorRequired] public Func<Task<HubResult>> EndTurnFunc { get; set; } = default!;
+    [Parameter, EditorRequired] public Func<Task<HubResult>> PauseTurnFunc { get; set; } = default!;
+    [Parameter, EditorRequired] public Func<Task<HubResult>> ResumeTurnFunc { get; set; } = default!;
     [Parameter, EditorRequired] public Func<Task<HubResult>> SkipTurnFunc { get; set; } = default!;
 
     private bool _isHost;
+    private bool _paused;
+    private bool _ending;
     private bool _skipping;
-    private string? _skipError;
+    private string? _error;
 
-    private string TimerColour => GameState.SecondsRemaining switch
+    private string TimerColour => _paused ? "text-gray-400" : GameState.SecondsRemaining switch
     {
         <= 10 => "text-red-400",
         <= 20 => "text-yellow-400",
@@ -56,12 +74,38 @@
             .Any(p => p.Name == GameState.PlayerName && p.IsHost) ?? false;
     }
 
+    private async Task OnDone()
+    {
+        _ending = true;
+        _error = null;
+        var result = await EndTurnFunc();
+        if (!result.Success) _error = result.Error;
+        _ending = false;
+    }
+
+    private async Task OnPauseResume()
+    {
+        _error = null;
+        if (_paused)
+        {
+            var result = await ResumeTurnFunc();
+            if (result.Success) _paused = false;
+            else _error = result.Error;
+        }
+        else
+        {
+            var result = await PauseTurnFunc();
+            if (result.Success) _paused = true;
+            else _error = result.Error;
+        }
+    }
+
     private async Task OnSkip()
     {
         _skipping = true;
-        _skipError = null;
+        _error = null;
         var result = await SkipTurnFunc();
-        if (!result.Success) _skipError = result.Error;
+        if (!result.Success) _error = result.Error;
         _skipping = false;
     }
 }

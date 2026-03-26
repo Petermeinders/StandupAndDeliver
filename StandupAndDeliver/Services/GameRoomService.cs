@@ -44,7 +44,7 @@ public class GameRoomService
         var player = room.Players.FirstOrDefault(p => p.ConnectionId == connectionId);
         if (player is null || !player.IsHost) return (null, new HubResult(false, "Only the host can start the game."));
         if (room.Phase != GamePhase.Lobby) return (null, new HubResult(false, "Game already started."));
-        if (room.Players.Count(p => p.IsConnected) < 3) return (null, new HubResult(false, "At least 3 players are required to start."));
+        if (room.Players.Count(p => p.IsConnected) < 1) return (null, new HubResult(false, "At least 1 player is required to start."));
 
         room.Phase = GamePhase.SpeakerTurn;
         room.LastActivity = DateTime.UtcNow;
