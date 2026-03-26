@@ -10,14 +10,15 @@ COPY StandupAndDeliver.Shared/StandupAndDeliver.Shared.csproj StandupAndDeliver.
 COPY StandupAndDeliver.Tests/StandupAndDeliver.Tests.csproj StandupAndDeliver.Tests/
 RUN dotnet restore
 
-# Pre-download Tailwind CLI so the MSBuild target doesn't need to fetch it at publish time
+# Copy remaining source
+COPY . .
+
+# Download Tailwind CLI AFTER source copy so it isn't overwritten
 RUN mkdir -p tools && \
     curl -fsSL -o tools/tailwindcss-linux-x64 \
       https://github.com/tailwindlabs/tailwindcss/releases/download/v4.2.2/tailwindcss-linux-x64 && \
     chmod +x tools/tailwindcss-linux-x64
 
-# Copy remaining source and publish
-COPY . .
 RUN dotnet publish StandupAndDeliver/StandupAndDeliver.csproj -c Release -o /app/publish --no-restore
 
 # Runtime stage — aspnet only, no SDK
