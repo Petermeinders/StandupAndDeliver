@@ -1,0 +1,9 @@
+**/bin/
+**/obj/
+**/.git/
+**/.vs/
+**/node_modules/
+*.md
+.gitignore
+docker-compose*.yml
+fly.toml
