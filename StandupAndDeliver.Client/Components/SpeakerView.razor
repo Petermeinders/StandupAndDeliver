@@ -5,57 +5,82 @@
 
         <p class="text-center text-gray-600 text-xs font-mono mb-6">Room: @GameState.State?.RoomCode</p>
 
-        <div class="text-center mb-6">
-            <span class="text-xs font-semibold uppercase tracking-widest text-yellow-400">Your Turn</span>
-            <div class="mt-2 flex items-center justify-center gap-2">
-                <span class="text-5xl font-mono font-bold @TimerColour">@GameState.SecondsRemaining</span>
-                <span class="text-gray-400 text-sm">@(_paused ? "paused" : "sec")</span>
-            </div>
-        </div>
-
-        @if (!string.IsNullOrEmpty(GameState.State?.PromptCardText))
+        @if (!GameState.State!.CardFlipped)
         {
-            <div class="bg-yellow-400 text-black rounded-2xl p-8 mb-6 text-center shadow-lg">
-                <p class="text-xl font-bold leading-snug">@GameState.State.PromptCardText</p>
+            <!-- Pre-flip: face-down card + tap prompt -->
+            <div class="text-center mb-6">
+                <span class="text-xs font-semibold uppercase tracking-widest text-yellow-400">Your Turn</span>
+                <p class="mt-2 text-gray-400 text-sm">Your card is ready. Tap it to reveal your task and start the clock.</p>
             </div>
+
+            <button @onclick="OnFlip" disabled="@_flipping"
+                    class="w-full bg-gray-800 border-2 border-dashed border-gray-600 rounded-2xl p-12 mb-6 text-center
+                           hover:border-yellow-400 hover:bg-gray-700 transition-all cursor-pointer active:scale-95">
+                <p class="text-5xl mb-3">🃏</p>
+                <p class="text-yellow-400 font-bold text-lg">@(_flipping ? "Flipping…" : "Tap to flip")</p>
+                <p class="text-gray-500 text-xs mt-1">The timer starts when you flip</p>
+            </button>
         }
-
-        <p class="text-center text-gray-400 text-sm mb-8">Deliver your best standup. Everyone is watching.</p>
-
-        <div class="flex gap-3 mb-3">
-            <button @onclick="OnPauseResume"
-                    class="flex-1 py-3 rounded-xl font-semibold transition-all
-                           @(_paused ? "bg-green-500 text-white hover:bg-green-400" : "bg-gray-700 text-gray-300 hover:bg-gray-600")">
-                @(_paused ? "Resume" : "Pause")
-            </button>
-            <button @onclick="OnDone" disabled="@_ending"
-                    class="flex-1 py-3 rounded-xl font-semibold bg-yellow-400 text-black hover:bg-yellow-300 transition-all">
-                @(_ending ? "…" : "Done")
-            </button>
-        </div>
-
-        @if (_isHost)
+        else
         {
-            <button @onclick="OnSkip" disabled="@_skipping"
-                    class="w-full py-2 rounded-xl text-sm font-semibold bg-gray-800 text-gray-400 hover:bg-gray-700 transition-all">
-                @(_skipping ? "Skipping…" : "Host: Skip Turn")
-            </button>
+            <!-- Post-flip: card revealed + timer + controls -->
+            <div class="text-center mb-6">
+                <span class="text-xs font-semibold uppercase tracking-widest text-yellow-400">Your Turn</span>
+                <div class="mt-2 flex items-center justify-center gap-2">
+                    <span class="text-5xl font-mono font-bold @TimerColour">@GameState.SecondsRemaining</span>
+                    <span class="text-gray-400 text-sm">@(_paused ? "paused" : "sec")</span>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(GameState.State?.PromptCardText))
+            {
+                <div class="bg-yellow-400 text-black rounded-2xl p-8 mb-6 text-center shadow-lg">
+                    <p class="text-xl font-bold leading-snug">@GameState.State.PromptCardText</p>
+                </div>
+            }
+
+            <p class="text-center text-gray-400 text-sm mb-6">Deliver your best standup. Everyone is watching.</p>
+
+            <div class="flex gap-3 mb-3">
+                <button @onclick="OnPauseResume"
+                        class="flex-1 py-3 rounded-xl font-semibold transition-all
+                               @(_paused ? "bg-green-500 text-white hover:bg-green-400" : "bg-gray-700 text-gray-300 hover:bg-gray-600")">
+                    @(_paused ? "Resume" : "Pause")
+                </button>
+                <button @onclick="OnDone" disabled="@_ending"
+                        class="flex-1 py-3 rounded-xl font-semibold bg-yellow-400 text-black hover:bg-yellow-300 transition-all">
+                    @(_ending ? "…" : "Done")
+                </button>
+            </div>
+
+            @if (_isHost)
+            {
+                <button @onclick="OnSkip" disabled="@_skipping"
+                        class="w-full py-2 rounded-xl text-sm font-semibold bg-gray-800 text-gray-400 hover:bg-gray-700 transition-all">
+                    @(_skipping ? "Skipping…" : "Host: Skip Turn")
+                </button>
+            }
         }
 
         @if (!string.IsNullOrEmpty(_error))
         {
             <p class="mt-3 text-red-400 text-sm text-center">@_error</p>
         }
+
+        <ScoreBoard />
+        <LeaveGameButton />
     </div>
 </div>
 
 @code {
+    [Parameter, EditorRequired] public Func<Task<HubResult>> FlipCardFunc { get; set; } = default!;
     [Parameter, EditorRequired] public Func<Task<HubResult>> EndTurnFunc { get; set; } = default!;
     [Parameter, EditorRequired] public Func<Task<HubResult>> PauseTurnFunc { get; set; } = default!;
     [Parameter, EditorRequired] public Func<Task<HubResult>> ResumeTurnFunc { get; set; } = default!;
     [Parameter, EditorRequired] public Func<Task<HubResult>> SkipTurnFunc { get; set; } = default!;
 
     private bool _isHost;
+    private bool _flipping;
     private bool _paused;
     private bool _ending;
     private bool _skipping;
@@ -72,6 +97,15 @@
     {
         _isHost = GameState.State?.Players
             .Any(p => p.Name == GameState.PlayerName && p.IsHost) ?? false;
+    }
+
+    private async Task OnFlip()
+    {
+        _flipping = true;
+        _error = null;
+        var result = await FlipCardFunc();
+        if (!result.Success) _error = result.Error;
+        _flipping = false;
     }
 
     private async Task OnDone()

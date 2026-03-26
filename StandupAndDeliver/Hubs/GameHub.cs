@@ -183,6 +183,20 @@ public class GameHub(GameRoomService gameRoomService, GameTimerService gameTimer
         return new HubResult(true);
     }
 
+    public async Task<HubResult> FlipCard()
+    {
+        var room = GetRoomForCaller();
+        if (room is null) return new HubResult(false, "Room not found.");
+        if (room.Phase != GamePhase.SpeakerTurn) return new HubResult(false, "No active turn.");
+
+        var speaker = room.Players[room.CurrentSpeakerIndex];
+        if (speaker.ConnectionId != Context.ConnectionId)
+            return new HubResult(false, "Only the active speaker can flip the card.");
+
+        await gameTimerService.FlipCardAsync(room);
+        return new HubResult(true);
+    }
+
     public async Task<HubResult> AdvanceTurn()
     {
         var room = GetRoomForCaller();
@@ -258,7 +272,8 @@ public class GameHub(GameRoomService gameRoomService, GameTimerService gameTimer
             PromptCardText: promptCardText,
             VotesSubmitted: room.CurrentTurnImpressiveness.Count,
             VotesTotal: room.Players.Count(p => p.IsConnected) - 1,
-            LastTurnResult: lastTurnResult
+            LastTurnResult: lastTurnResult,
+            CardFlipped: room.CardFlipped
         );
     }
 }

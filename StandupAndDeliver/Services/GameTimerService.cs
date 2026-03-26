@@ -42,6 +42,7 @@ public class GameTimerService(
         room.UsedCardIds.Add(card.Id);
         room.CurrentTurnImpressiveness.Clear();
         room.CurrentTurnLieVotes.Clear();
+        room.CardFlipped = false;
         room.LastActivity = DateTime.UtcNow;
         _activeCardText[room.RoomCode] = card.Text;
 
@@ -50,6 +51,23 @@ public class GameTimerService(
             .ReceiveGameState(GameHub.BuildStateDto(room, speaker.ConnectionId));
         await hubContext.Clients.Client(speaker.ConnectionId)
             .ReceiveGameState(GameHub.BuildStateDto(room, speaker.ConnectionId, card.Text));
+        // Timer does NOT start here — speaker must flip the card first
+    }
+
+    public async Task FlipCardAsync(GameRoom room)
+    {
+        if (room.CardFlipped) return;
+        room.CardFlipped = true;
+        room.LastActivity = DateTime.UtcNow;
+
+        var speaker = room.Players[room.CurrentSpeakerIndex];
+        var cardText = _activeCardText.GetValueOrDefault(room.RoomCode, "");
+
+        // Broadcast flipped state to everyone (waiting players now see timer starting)
+        await hubContext.Clients.GroupExcept(room.RoomCode, speaker.ConnectionId)
+            .ReceiveGameState(GameHub.BuildStateDto(room, speaker.ConnectionId));
+        await hubContext.Clients.Client(speaker.ConnectionId)
+            .ReceiveGameState(GameHub.BuildStateDto(room, speaker.ConnectionId, cardText));
 
         StartTurnTimer(room, TurnSeconds);
     }

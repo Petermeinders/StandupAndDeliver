@@ -1,0 +1,17 @@
+@inject NavigationManager Nav
+@inject GameStateService GameState
+
+<div class="mt-6 text-center">
+    <button @onclick="OnLeave"
+            class="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:text-gray-400 transition-all">
+        Leave Game
+    </button>
+</div>
+
+@code {
+    private void OnLeave()
+    {
+        GameState.Clear();
+        Nav.NavigateTo("/");
+    }
+}

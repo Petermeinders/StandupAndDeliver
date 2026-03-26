@@ -9,5 +9,6 @@ public record GameStateDto(
     string? PromptCardText,
     int VotesSubmitted,
     int VotesTotal,
-    TurnResultDto? LastTurnResult
+    TurnResultDto? LastTurnResult,
+    bool CardFlipped = false
 );

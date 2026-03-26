@@ -1,0 +1,35 @@
+@inject GameStateService GameState
+
+@{
+    var players = GameState.State?.Players;
+    var me = GameState.PlayerName;
+}
+
+@if (players is not null && players.Count > 0)
+{
+    <div class="w-full max-w-md mt-8 border-t border-gray-800 pt-4">
+        <p class="text-xs uppercase tracking-widest text-gray-600 mb-3 text-center">Scores</p>
+        <div class="flex flex-col gap-1">
+            @foreach (var p in players.OrderByDescending(p => p.Score))
+            {
+                <div class="flex justify-between items-center px-3 py-2 rounded-xl
+                            @(p.Name == me ? "bg-gray-800 text-white" : "text-gray-400")">
+                    <span class="text-sm font-semibold">
+                        @p.Name
+                        @if (p.Name == me)
+                        {
+                            <span class="ml-1 text-xs text-yellow-400">(you)</span>
+                        }
+                        @if (!p.IsConnected)
+                        {
+                            <span class="ml-1 text-xs text-gray-600">(offline)</span>
+                        }
+                    </span>
+                    <span class="text-sm font-mono font-bold @(p.Name == me ? "text-yellow-400" : "text-gray-500")">
+                        @p.Score
+                    </span>
+                </div>
+            }
+        </div>
+    </div>
+}

@@ -41,7 +41,8 @@ else
             @if (GameState.State?.ActivePlayerName == GameState.PlayerName)
             {
                 <SpeakerView EndTurnFunc="EndTurn" PauseTurnFunc="PauseTurn"
-                             ResumeTurnFunc="ResumeTurn" SkipTurnFunc="SkipTurn" />
+                             ResumeTurnFunc="ResumeTurn" SkipTurnFunc="SkipTurn"
+                             FlipCardFunc="FlipCard" />
             }
             else
             {
@@ -181,6 +182,9 @@ else
 
     private async Task<HubResult> StartGame() =>
         _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("StartGame");
+
+    private async Task<HubResult> FlipCard() =>
+        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("FlipCard");
 
     private async Task<HubResult> EndTurn() =>
         _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("EndTurn");

@@ -14,4 +14,5 @@ public class GameRoom
     public Dictionary<string, int> CurrentTurnImpressiveness { get; set; } = [];
     public Dictionary<string, bool> CurrentTurnLieVotes { get; set; } = [];
     public int? ActiveCardId { get; set; }
+    public bool CardFlipped { get; set; }
 }
