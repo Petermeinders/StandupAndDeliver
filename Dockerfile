@@ -13,13 +13,25 @@ RUN dotnet restore
 # Copy remaining source
 COPY . .
 
-# Download Tailwind CLI AFTER source copy so it isn't overwritten
-RUN mkdir -p tools && \
-    curl -fsSL -o tools/tailwindcss-linux-x64 \
+# Download Tailwind CLI and build CSS directly (bypasses MSBuild integration)
+RUN curl -fsSL -o /tmp/tailwindcss \
       https://github.com/tailwindlabs/tailwindcss/releases/download/v4.2.2/tailwindcss-linux-x64 && \
-    chmod +x tools/tailwindcss-linux-x64
+    chmod +x /tmp/tailwindcss && \
+    mkdir -p StandupAndDeliver/wwwroot/css && \
+    /tmp/tailwindcss \
+      -i StandupAndDeliver.Client/wwwroot/css/app.input.css \
+      -o StandupAndDeliver/wwwroot/css/app.css \
+      --minify && \
+    echo "Tailwind CSS built successfully" && \
+    ls -lh StandupAndDeliver/wwwroot/css/
 
-RUN dotnet publish StandupAndDeliver/StandupAndDeliver.csproj -c Release -o /app/publish --no-restore
+# Publish — skip MSBuild Tailwind target since CSS is already built above
+RUN dotnet publish StandupAndDeliver/StandupAndDeliver.csproj \
+    -c Release -o /app/publish --no-restore \
+    -p:SkipTailwindBuild=true
+
+# Verify CSS made it into the publish output
+RUN ls -lh /app/publish/wwwroot/css/ && echo "CSS verified in publish output"
 
 # Runtime stage — aspnet only, no SDK
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
