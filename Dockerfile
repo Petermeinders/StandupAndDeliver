@@ -26,22 +26,20 @@ RUN curl -fsSL -o /tmp/tailwindcss \
     ls -lh StandupAndDeliver/wwwroot/css/
 
 # Publish — skip MSBuild Tailwind target since CSS is already built above
+# Note: --no-restore removed so publish can resolve implicit WASM static assets
 RUN dotnet publish StandupAndDeliver/StandupAndDeliver.csproj \
-    -c Release -o /app/publish --no-restore \
+    -c Release -o /app/publish \
     -p:SkipTailwindBuild=true
 
 # Verify CSS made it into the publish output
 RUN ls -lh /app/publish/wwwroot/css/ && echo "CSS verified in publish output"
 
-# Workaround: blazor.web.js is missing from Release static assets manifest in .NET 10.
-# The file lives in the SDK installation (not NuGet cache) — search the full filesystem.
-RUN BLAZOR_WEB_JS=$(find /usr/share/dotnet /root/.nuget -name "blazor.web.js" 2>/dev/null | head -1) && \
-    echo "Found blazor.web.js at: $BLAZOR_WEB_JS" && \
-    cp "$BLAZOR_WEB_JS" /app/publish/wwwroot/_framework/ && \
-    BLAZOR_DIR=$(dirname "$BLAZOR_WEB_JS") && \
-    [ -f "$BLAZOR_DIR/blazor.web.js.gz" ] && cp "$BLAZOR_DIR/blazor.web.js.gz" /app/publish/wwwroot/_framework/ || true && \
-    [ -f "$BLAZOR_DIR/blazor.web.js.br" ] && cp "$BLAZOR_DIR/blazor.web.js.br" /app/publish/wwwroot/_framework/ || true && \
-    echo "Done:" && ls /app/publish/wwwroot/_framework/blazor.web.js*
+# Diagnostic: find blazor.web.js anywhere in the image
+RUN echo "=== Searching for blazor.web.js ===" && \
+    find / -name "blazor.web.js" 2>/dev/null && \
+    echo "=== Search complete ===" && \
+    echo "=== _framework contents ===" && \
+    ls /app/publish/wwwroot/_framework/ | grep blazor
 
 # Runtime stage — aspnet only, no SDK
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
