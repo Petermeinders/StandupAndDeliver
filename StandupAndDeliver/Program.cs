@@ -1,8 +1,12 @@
 using Microsoft.AspNetCore.Http.Connections;
+using StandupAndDeliver.Endpoints;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 using StandupAndDeliver.Client.Pages;
 using StandupAndDeliver.Components;
+using StandupAndDeliver.Data;
 using StandupAndDeliver.Hubs;
+using StandupAndDeliver.Services;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -19,8 +23,22 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddSignalR();
 builder.Services.AddHealthChecks();
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=standup.db";
+builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite(connectionString));
+builder.Services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite(connectionString));
+builder.Services.AddSingleton<PromptCardService>();
+builder.Services.AddSingleton<GameRoomService>();
+builder.Services.AddSingleton<GameTimerService>();
+builder.Services.AddHostedService<RoomCleanupService>();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.EnsureCreatedAsync();
+    await SeedData.SeedAsync(db);
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -49,5 +67,6 @@ app.MapHub<GameHub>("/gamehub", options =>
 });
 
 app.MapHealthChecks("/health");
+app.MapAdminCardEndpoints();
 
 app.Run();

@@ -1,0 +1,218 @@
+@page "/room"
+@rendermode InteractiveWebAssembly
+@inject GameStateService GameState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Standup & Deliver</PageTitle>
+
+@if (_reconnecting)
+{
+    <div class="fixed top-0 inset-x-0 z-50 bg-yellow-400 text-black text-center text-sm font-semibold py-2">
+        Reconnecting…
+    </div>
+}
+
+@if (_connecting)
+{
+    <div class="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+        <p class="text-gray-400 text-lg">Connecting…</p>
+    </div>
+}
+else if (!string.IsNullOrEmpty(_fatalError))
+{
+    <div class="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center gap-4">
+        <p class="text-red-400 text-lg">@_fatalError</p>
+        <button @onclick="GoHome" class="px-6 py-3 bg-yellow-400 text-black rounded-xl font-bold hover:bg-yellow-300">
+            Back to Home
+        </button>
+    </div>
+}
+else
+{
+    @switch (GameState.State?.Phase)
+    {
+        case GamePhase.Lobby:
+            <LobbyView OnStart="StateHasChanged" StartGameFunc="StartGame" />
+            break;
+
+        case GamePhase.SpeakerTurn:
+            @if (GameState.State?.ActivePlayerName == GameState.PlayerName)
+            {
+                <SpeakerView SkipTurnFunc="SkipTurn" />
+            }
+            else
+            {
+                <WaitingView SkipTurnFunc="SkipTurn" />
+            }
+            break;
+
+        case GamePhase.Voting:
+            <VotingView SubmitVoteFunc="SubmitVote" />
+            break;
+
+        case GamePhase.Reveal:
+            <RevealView AdvanceTurnFunc="AdvanceTurn" />
+            break;
+
+        case GamePhase.GameOver:
+            <GameOverView />
+            break;
+
+        default:
+            <div class="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+                <p class="text-gray-400">Phase: @GameState.State?.Phase — coming soon</p>
+            </div>
+            break;
+    }
+}
+
+@code {
+    [Parameter, SupplyParameterFromQuery] public string? Action { get; set; }
+    [Parameter, SupplyParameterFromQuery] public string? Code { get; set; }
+
+    private HubConnection? _hub;
+    private VisibilityInterop? _visibilityInterop;
+    private bool _connecting = true;
+    private bool _reconnecting;
+    private string? _fatalError;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        if (string.IsNullOrEmpty(GameState.PlayerName))
+        {
+            Nav.NavigateTo("/");
+            return;
+        }
+
+        _hub = new HubConnectionBuilder()
+            .WithUrl(Nav.ToAbsoluteUri("/gamehub"), options =>
+            {
+                options.Transports = HttpTransportType.WebSockets;
+                options.SkipNegotiation = true;
+            })
+            .WithAutomaticReconnect([TimeSpan.Zero, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10)])
+            .Build();
+
+        _hub.Reconnected += async _ =>
+        {
+            _reconnecting = false;
+            if (GameState.State is not null && GameState.PlayerName is not null)
+                await _hub.InvokeAsync<HubResult>("RejoinRoom", GameState.State.RoomCode, GameState.PlayerName);
+            await InvokeAsync(StateHasChanged);
+        };
+
+        _hub.Reconnecting += _ =>
+        {
+            _reconnecting = true;
+            return InvokeAsync(StateHasChanged);
+        };
+
+        _hub.Closed += _ =>
+        {
+            _reconnecting = false;
+            return InvokeAsync(StateHasChanged);
+        };
+
+        _hub.On<GameStateDto>("ReceiveGameState", state =>
+        {
+            GameState.Update(state);
+            InvokeAsync(StateHasChanged);
+        });
+
+        _hub.On<int>("ReceiveTimerTick", seconds =>
+        {
+            GameState.UpdateTimer(seconds);
+            InvokeAsync(StateHasChanged);
+        });
+
+        _hub.On<int, int>("ReceiveVoteCount", (submitted, total) =>
+        {
+            GameState.UpdateVoteCount(submitted, total);
+            InvokeAsync(StateHasChanged);
+        });
+
+        try
+        {
+            await _hub.StartAsync();
+
+            HubResult result;
+            if (Action == "create")
+            {
+                result = await _hub.InvokeAsync<HubResult>("CreateRoom", GameState.PlayerName);
+            }
+            else if (Action == "join" && !string.IsNullOrEmpty(Code))
+            {
+                result = await _hub.InvokeAsync<HubResult>("JoinRoom", Code, GameState.PlayerName);
+            }
+            else
+            {
+                _fatalError = "Invalid room action.";
+                _connecting = false;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            if (!result.Success)
+            {
+                _fatalError = result.Error ?? "Failed to enter room.";
+                _connecting = false;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            _fatalError = $"Connection failed: {ex.Message}";
+            _connecting = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        _connecting = false;
+        _visibilityInterop = new VisibilityInterop(JS, _hub, GameState);
+        await _visibilityInterop.RegisterAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task<HubResult> StartGame()
+    {
+        if (_hub is null) return new HubResult(false, "Not connected.");
+        return await _hub.InvokeAsync<HubResult>("StartGame");
+    }
+
+    private async Task<HubResult> SubmitVote(bool lied, int impressiveness)
+    {
+        if (_hub is null) return new HubResult(false, "Not connected.");
+        return await _hub.InvokeAsync<HubResult>("SubmitVote", lied, impressiveness);
+    }
+
+    private async Task<HubResult> AdvanceTurn()
+    {
+        if (_hub is null) return new HubResult(false, "Not connected.");
+        return await _hub.InvokeAsync<HubResult>("AdvanceTurn");
+    }
+
+    private async Task<HubResult> SkipTurn()
+    {
+        if (_hub is null) return new HubResult(false, "Not connected.");
+        return await _hub.InvokeAsync<HubResult>("SkipTurn");
+    }
+
+    private void GoHome()
+    {
+        GameState.Clear();
+        Nav.NavigateTo("/");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_visibilityInterop is not null)
+            await _visibilityInterop.DisposeAsync();
+        if (_hub is not null)
+            await _hub.DisposeAsync();
+    }
+}

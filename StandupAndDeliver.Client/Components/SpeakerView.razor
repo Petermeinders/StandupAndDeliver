@@ -1,0 +1,67 @@
+@inject GameStateService GameState
+
+<div class="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center p-6">
+    <div class="w-full max-w-md">
+
+        <div class="text-center mb-6">
+            <span class="text-xs font-semibold uppercase tracking-widest text-yellow-400">Your Turn</span>
+            <div class="mt-2 flex items-center justify-center gap-2">
+                <span class="text-5xl font-mono font-bold @TimerColour">@GameState.SecondsRemaining</span>
+                <span class="text-gray-400 text-sm">sec</span>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(GameState.State?.PromptCardText))
+        {
+            <div class="bg-yellow-400 text-black rounded-2xl p-8 mb-6 text-center shadow-lg">
+                <p class="text-xl font-bold leading-snug">@GameState.State.PromptCardText</p>
+            </div>
+        }
+
+        <p class="text-center text-gray-400 text-sm">Deliver your best standup. Everyone is watching.</p>
+
+        @if (_isHost)
+        {
+            <div class="mt-8 text-center">
+                <button @onclick="OnSkip" disabled="@_skipping"
+                        class="px-6 py-2 rounded-xl text-sm font-semibold bg-gray-700 text-gray-300 hover:bg-gray-600 transition-all">
+                    @(_skipping ? "Skipping…" : "Skip Turn")
+                </button>
+                @if (!string.IsNullOrEmpty(_skipError))
+                {
+                    <p class="mt-2 text-red-400 text-sm">@_skipError</p>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Func<Task<HubResult>> SkipTurnFunc { get; set; } = default!;
+
+    private bool _isHost;
+    private bool _skipping;
+    private string? _skipError;
+
+    private string TimerColour => GameState.SecondsRemaining switch
+    {
+        <= 10 => "text-red-400",
+        <= 20 => "text-yellow-400",
+        _ => "text-white"
+    };
+
+    protected override void OnParametersSet()
+    {
+        _isHost = GameState.State?.Players
+            .Any(p => p.Name == GameState.PlayerName && p.IsHost) ?? false;
+    }
+
+    private async Task OnSkip()
+    {
+        _skipping = true;
+        _skipError = null;
+        var result = await SkipTurnFunc();
+        if (!result.Success) _skipError = result.Error;
+        _skipping = false;
+    }
+}

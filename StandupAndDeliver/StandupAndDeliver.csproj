@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.*" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <ProjectReference Include="..\StandupAndDeliver.Client\StandupAndDeliver.Client.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.5" />
@@ -23,22 +24,23 @@
       You can override TailwindCliUrl/TailwindCliVersion from the command line or CI if needed.
     -->
     <TailwindCliVersion Condition="'$(TailwindCliVersion)' == ''">v4.2.2</TailwindCliVersion>
-    <TailwindCliFileName Condition="'$(TailwindCliFileName)' == ''">tailwindcss-windows-x64.exe</TailwindCliFileName>
+    <!-- OS-specific binary name -->
+    <TailwindCliFileName Condition="'$(TailwindCliFileName)' == '' AND $([MSBuild]::IsOSPlatform('Windows'))">tailwindcss-windows-x64.exe</TailwindCliFileName>
+    <TailwindCliFileName Condition="'$(TailwindCliFileName)' == '' AND $([MSBuild]::IsOSPlatform('Linux'))">tailwindcss-linux-x64</TailwindCliFileName>
+    <TailwindCliFileName Condition="'$(TailwindCliFileName)' == '' AND $([MSBuild]::IsOSPlatform('OSX'))">tailwindcss-macos-arm64</TailwindCliFileName>
     <TailwindCliUrl Condition="'$(TailwindCliUrl)' == ''">https://github.com/tailwindlabs/tailwindcss/releases/download/$(TailwindCliVersion)/$(TailwindCliFileName)</TailwindCliUrl>
     <TailwindCliPath>$(MSBuildThisFileDirectory)..\tools\$(TailwindCliFileName)</TailwindCliPath>
   </PropertyGroup>
 
   <Target Name="EnsureTailwindCLIBinary" BeforeTargets="BuildTailwindCSS">
-    <Exec
-      Condition="!Exists('$(TailwindCliPath)')"
-      Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;Write-Host 'Tailwind CLI not found. Downloading...'; $outDir = Split-Path -Parent -Path '$(TailwindCliPath)'; if (!(Test-Path -LiteralPath $outDir)) { New-Item -ItemType Directory -Force -Path $outDir | Out-Null }; Invoke-WebRequest -Uri '$(TailwindCliUrl)' -OutFile '$(TailwindCliPath)'&quot;"
-      ConsoleToMSBuild="true" />
+    <!-- Windows: use PowerShell -->
+    <Exec Condition="!Exists('$(TailwindCliPath)') AND $([MSBuild]::IsOSPlatform('Windows'))" Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;Write-Host 'Tailwind CLI not found. Downloading...'; $outDir = Split-Path -Parent -Path '$(TailwindCliPath)'; if (!(Test-Path -LiteralPath $outDir)) { New-Item -ItemType Directory -Force -Path $outDir | Out-Null }; Invoke-WebRequest -Uri '$(TailwindCliUrl)' -OutFile '$(TailwindCliPath)'&quot;" ConsoleToMSBuild="true" />
+    <!-- Linux / macOS: use curl -->
+    <Exec Condition="!Exists('$(TailwindCliPath)') AND !$([MSBuild]::IsOSPlatform('Windows'))" Command="mkdir -p $([System.IO.Path]::GetDirectoryName('$(TailwindCliPath)')) &amp;&amp; curl -fsSL -o $(TailwindCliPath) $(TailwindCliUrl) &amp;&amp; chmod +x $(TailwindCliPath)" ConsoleToMSBuild="true" />
   </Target>
 
   <Target Name="BuildTailwindCSS" BeforeTargets="Build;Publish">
-    <Exec
-      Command="$(TailwindCliPath) -i $(MSBuildThisFileDirectory)..\StandupAndDeliver.Client\wwwroot\css\app.input.css -o $(MSBuildThisFileDirectory)wwwroot\css\app.css --minify"
-      ConsoleToMSBuild="true" />
+    <Exec Command="$(TailwindCliPath) -i $(MSBuildThisFileDirectory)..\StandupAndDeliver.Client\wwwroot\css\app.input.css -o $(MSBuildThisFileDirectory)wwwroot\css\app.css --minify" ConsoleToMSBuild="true" />
   </Target>
 
 </Project>

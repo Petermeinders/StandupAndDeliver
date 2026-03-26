@@ -1,0 +1,61 @@
+@inject GameStateService GameState
+@inject NavigationManager Nav
+
+<div class="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center p-6">
+    <div class="w-full max-w-md">
+
+        <h1 class="text-3xl font-bold text-center text-yellow-400 mb-1">Final Standings</h1>
+        <p class="text-center text-gray-500 text-sm mb-8">Room @GameState.State?.RoomCode</p>
+
+        <div class="bg-gray-900 rounded-2xl p-6 mb-8">
+            @{
+                var ranked = GameState.State?.Players
+                    .OrderByDescending(p => p.Score)
+                    .ToList() ?? [];
+                var prevScore = int.MaxValue;
+                var rank = 0;
+                var display = 0;
+            }
+
+            @foreach (var player in ranked)
+            {
+                display++;
+                if (player.Score < prevScore)
+                {
+                    rank = display;
+                    prevScore = player.Score;
+                }
+
+                var isMe = player.Name == GameState.PlayerName;
+
+                <div class="flex items-center gap-4 py-3 @(display < ranked.Count ? "border-b border-gray-800" : "")">
+                    <span class="text-gray-500 font-mono w-6 text-center">@rank</span>
+                    <span class="flex-1 font-semibold @(isMe ? "text-yellow-400" : "text-white")">
+                        @player.Name
+                        @if (isMe)
+                        {
+                            <span class="text-xs ml-1 text-yellow-600">(you)</span>
+                        }
+                    </span>
+                    <span class="font-bold text-lg @(rank == 1 ? "text-yellow-400" : "text-gray-300")">
+                        @player.Score
+                    </span>
+                </div>
+            }
+        </div>
+
+        <button @onclick="GoHome"
+                class="w-full py-4 rounded-xl font-bold text-lg bg-yellow-400 text-black hover:bg-yellow-300 transition-all">
+            Back to Home
+        </button>
+
+    </div>
+</div>
+
+@code {
+    private void GoHome()
+    {
+        GameState.Clear();
+        Nav.NavigateTo("/");
+    }
+}

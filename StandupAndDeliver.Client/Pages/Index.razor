@@ -1,0 +1,120 @@
+@page "/"
+@rendermode InteractiveWebAssembly
+@inject GameStateService GameState
+@inject NavigationManager Nav
+
+<PageTitle>Standup & Deliver</PageTitle>
+
+<div class="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center p-6">
+    <div class="w-full max-w-md">
+
+        <h1 class="text-4xl font-bold text-center mb-2 text-yellow-400">Standup & Deliver</h1>
+        <p class="text-center text-gray-400 mb-10 text-sm">The corporate buzzword party game</p>
+
+        <div class="bg-gray-900 rounded-2xl p-6 mb-4">
+            <h2 class="text-lg font-semibold mb-4 text-gray-300">Create a Room</h2>
+            <div class="space-y-3">
+                <input
+                    @bind="_createName"
+                    @bind:event="oninput"
+                    @onkeydown="OnCreateKeyDown"
+                    placeholder="Your name"
+                    maxlength="20"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-yellow-400" />
+                <button
+                    @onclick="OnCreate"
+                    disabled="@(_creating || string.IsNullOrWhiteSpace(_createName))"
+                    class="w-full py-3 rounded-xl font-bold transition-all
+                           @(string.IsNullOrWhiteSpace(_createName)
+                               ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                               : "bg-yellow-400 text-black hover:bg-yellow-300")">
+                    @(_creating ? "Creating…" : "Create Room")
+                </button>
+            </div>
+            @if (!string.IsNullOrEmpty(_createError))
+            {
+                <p class="mt-3 text-red-400 text-sm">@_createError</p>
+            }
+        </div>
+
+        <div class="bg-gray-900 rounded-2xl p-6">
+            <h2 class="text-lg font-semibold mb-4 text-gray-300">Join a Room</h2>
+            <div class="space-y-3">
+                <input
+                    @bind="_joinCode"
+                    @bind:event="oninput"
+                    @onkeydown="OnJoinKeyDown"
+                    placeholder="Room code (e.g. ABCD)"
+                    maxlength="4"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 font-mono uppercase tracking-widest focus:outline-none focus:border-yellow-400" />
+                <input
+                    @bind="_joinName"
+                    @bind:event="oninput"
+                    @onkeydown="OnJoinKeyDown"
+                    placeholder="Your name"
+                    maxlength="20"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-yellow-400" />
+                <button
+                    @onclick="OnJoin"
+                    disabled="@(_joining || string.IsNullOrWhiteSpace(_joinCode) || string.IsNullOrWhiteSpace(_joinName))"
+                    class="w-full py-3 rounded-xl font-bold transition-all
+                           @(string.IsNullOrWhiteSpace(_joinCode) || string.IsNullOrWhiteSpace(_joinName)
+                               ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                               : "bg-gray-600 text-white hover:bg-gray-500")">
+                    @(_joining ? "Joining…" : "Join Room")
+                </button>
+            </div>
+            @if (!string.IsNullOrEmpty(_joinError))
+            {
+                <p class="mt-3 text-red-400 text-sm">@_joinError</p>
+            }
+        </div>
+
+    </div>
+</div>
+
+@code {
+    [Parameter, SupplyParameterFromQuery] public string? Error { get; set; }
+
+    private string _createName = "";
+    private string _joinCode = "";
+    private string _joinName = "";
+    private bool _creating;
+    private bool _joining;
+    private string? _createError;
+    private string? _joinError;
+
+    protected override void OnParametersSet()
+    {
+        if (!string.IsNullOrEmpty(Error))
+            _joinError = Error;
+    }
+
+    private async Task OnCreate()
+    {
+        if (string.IsNullOrWhiteSpace(_createName)) return;
+        _creating = true;
+        _createError = null;
+        GameState.PlayerName = _createName.Trim();
+        Nav.NavigateTo($"/room?action=create");
+    }
+
+    private async Task OnJoin()
+    {
+        if (string.IsNullOrWhiteSpace(_joinCode) || string.IsNullOrWhiteSpace(_joinName)) return;
+        _joining = true;
+        _joinError = null;
+        GameState.PlayerName = _joinName.Trim();
+        Nav.NavigateTo($"/room?action=join&code={_joinCode.ToUpperInvariant()}");
+    }
+
+    private async Task OnCreateKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await OnCreate();
+    }
+
+    private async Task OnJoinKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await OnJoin();
+    }
+}

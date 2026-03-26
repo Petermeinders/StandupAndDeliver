@@ -1,0 +1,60 @@
+@inject GameStateService GameState
+
+<div class="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center p-6">
+    <div class="w-full max-w-md text-center">
+
+        <p class="text-gray-400 text-sm uppercase tracking-widest mb-2">Now speaking</p>
+        <h2 class="text-3xl font-bold mb-6 text-yellow-400">@GameState.State?.ActivePlayerName</h2>
+
+        <div class="bg-gray-900 rounded-2xl p-8 mb-6">
+            <p class="text-gray-400 text-sm mb-3">Time remaining</p>
+            <span class="text-6xl font-mono font-bold @TimerColour">@GameState.SecondsRemaining</span>
+        </div>
+
+        <p class="text-gray-500 text-sm">Listen carefully — you'll be voting soon.</p>
+
+        @if (_isHost)
+        {
+            <div class="mt-8">
+                <button @onclick="OnSkip" disabled="@_skipping"
+                        class="px-6 py-2 rounded-xl text-sm font-semibold bg-gray-700 text-gray-300 hover:bg-gray-600 transition-all">
+                    @(_skipping ? "Skipping…" : "Skip Turn")
+                </button>
+                @if (!string.IsNullOrEmpty(_skipError))
+                {
+                    <p class="mt-2 text-red-400 text-sm">@_skipError</p>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Func<Task<HubResult>> SkipTurnFunc { get; set; } = default!;
+
+    private bool _isHost;
+    private bool _skipping;
+    private string? _skipError;
+
+    private string TimerColour => GameState.SecondsRemaining switch
+    {
+        <= 10 => "text-red-400",
+        <= 20 => "text-yellow-400",
+        _ => "text-white"
+    };
+
+    protected override void OnParametersSet()
+    {
+        _isHost = GameState.State?.Players
+            .Any(p => p.Name == GameState.PlayerName && p.IsHost) ?? false;
+    }
+
+    private async Task OnSkip()
+    {
+        _skipping = true;
+        _skipError = null;
+        var result = await SkipTurnFunc();
+        if (!result.Success) _skipError = result.Error;
+        _skipping = false;
+    }
+}
