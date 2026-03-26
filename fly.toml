@@ -1,4 +1,4 @@
-app = "standup-and-deliver"
+app = "standupanddeliver"
 primary_region = "iad"
 
 [build]
