@@ -1,10 +1,5 @@
-# fly.toml app configuration file generated for standupanddeliver on 2026-03-26T20:08:35Z
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
-
-app = 'standupanddeliver'
-primary_region = 'iad'
+app = "standupanddeliver"
+primary_region = "iad"
 
 [build]
 

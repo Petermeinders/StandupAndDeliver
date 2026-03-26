@@ -39,7 +39,8 @@
     <Exec Condition="!Exists('$(TailwindCliPath)') AND !$([MSBuild]::IsOSPlatform('Windows'))" Command="mkdir -p $([System.IO.Path]::GetDirectoryName('$(TailwindCliPath)')) &amp;&amp; curl -fsSL -o $(TailwindCliPath) $(TailwindCliUrl) &amp;&amp; chmod +x $(TailwindCliPath)" ConsoleToMSBuild="true" />
   </Target>
 
-  <Target Name="BuildTailwindCSS" BeforeTargets="Build;Publish">
+  <Target Name="BuildTailwindCSS" BeforeTargets="Build;Publish"
+          Condition="'$(SkipTailwindBuild)' != 'true'">
     <Exec Command="$(TailwindCliPath) -i $(MSBuildThisFileDirectory)..\StandupAndDeliver.Client\wwwroot\css\app.input.css -o $(MSBuildThisFileDirectory)wwwroot\css\app.css --minify" ConsoleToMSBuild="true" />
   </Target>
 
