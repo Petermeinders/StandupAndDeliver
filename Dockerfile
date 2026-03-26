@@ -33,6 +33,13 @@ RUN dotnet publish StandupAndDeliver/StandupAndDeliver.csproj \
 # Verify CSS made it into the publish output
 RUN ls -lh /app/publish/wwwroot/css/ && echo "CSS verified in publish output"
 
+# Workaround: blazor.web.js is missing from Release static assets manifest in .NET 10.
+# Copy it (and compressed variants) from the NuGet cache into the publish _framework folder.
+RUN find /root/.nuget/packages/microsoft.aspnetcore.app.internal.assets \
+      -name "blazor.web.js" -o -name "blazor.web.js.gz" -o -name "blazor.web.js.br" \
+    | xargs -I{} cp {} /app/publish/wwwroot/_framework/ && \
+    echo "blazor.web.js copied:" && ls /app/publish/wwwroot/_framework/blazor.web.js*
+
 # Runtime stage — aspnet only, no SDK
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
