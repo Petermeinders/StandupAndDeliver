@@ -2,6 +2,51 @@ html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
+/* ── Card flip ─────────────────────────────────────────────────────────── */
+.card-flip-scene {
+    perspective: 900px;
+    width: 100%;
+}
+
+.card-flip-inner {
+    position: relative;
+    width: 100%;
+    transform-style: preserve-3d;
+    transition: transform 0.65s cubic-bezier(0.4, 0.2, 0.2, 1);
+}
+
+.card-flip-inner.flipped {
+    transform: rotateY(180deg);
+}
+
+.card-face {
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    border-radius: 1rem;
+    width: 100%;
+}
+
+.card-face-back {
+    /* The face-down side — sits on top initially */
+}
+
+.card-face-front {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform: rotateY(180deg);
+}
+
+/* ── Screen fade-in ─────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.screen-fade {
+    animation: fadeIn 0.3s ease-out both;
+}
+
 a, .btn-link {
     color: #006bb7;
 }

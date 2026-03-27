@@ -34,36 +34,50 @@ else
     @switch (GameState.State?.Phase)
     {
         case GamePhase.Lobby:
-            <LobbyView OnStart="StateHasChanged" StartGameFunc="StartGame" />
+            <div @key="GamePhase.Lobby" class="screen-fade">
+                <LobbyView OnStart="StateHasChanged" StartGameFunc="StartGame" />
+            </div>
             break;
 
         case GamePhase.SpeakerTurn:
             @if (GameState.State?.ActivePlayerName == GameState.PlayerName)
             {
-                <SpeakerView EndTurnFunc="EndTurn" PauseTurnFunc="PauseTurn"
-                             ResumeTurnFunc="ResumeTurn" SkipTurnFunc="SkipTurn"
-                             FlipCardFunc="FlipCard" />
+                <div @key="@((GamePhase.SpeakerTurn, "speaker"))" class="screen-fade">
+                    <SpeakerView EndTurnFunc="EndTurn" PauseTurnFunc="PauseTurn"
+                                 ResumeTurnFunc="ResumeTurn" SkipTurnFunc="SkipTurn"
+                                 FlipCardFunc="FlipCard" />
+                </div>
             }
             else
             {
-                <WaitingView SkipTurnFunc="SkipTurn" SendReactionFunc="SendReaction" />
+                <div @key="@((GamePhase.SpeakerTurn, "waiting"))" class="screen-fade">
+                    <WaitingView SkipTurnFunc="SkipTurn" SendReactionFunc="SendReaction" />
+                </div>
             }
             break;
 
         case GamePhase.Voting:
-            <VotingView SubmitImpressivenessFunc="SubmitImpressiveness" />
+            <div @key="GamePhase.Voting" class="screen-fade">
+                <VotingView SubmitImpressivenessFunc="SubmitImpressiveness" />
+            </div>
             break;
 
         case GamePhase.Reveal:
-            <RevealView SubmitLieVoteFunc="SubmitLieVote" />
+            <div @key="GamePhase.Reveal" class="screen-fade">
+                <RevealView SubmitLieVoteFunc="SubmitLieVote" />
+            </div>
             break;
 
         case GamePhase.Results:
-            <ResultsView AdvanceTurnFunc="AdvanceTurn" />
+            <div @key="GamePhase.Results" class="screen-fade">
+                <ResultsView AdvanceTurnFunc="AdvanceTurn" />
+            </div>
             break;
 
         case GamePhase.GameOver:
-            <GameOverView />
+            <div @key="GamePhase.GameOver" class="screen-fade">
+                <GameOverView />
+            </div>
             break;
 
         default:
