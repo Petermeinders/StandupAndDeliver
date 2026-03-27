@@ -28,6 +28,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite(connectionString), ServiceLifetime.Singleton);
 builder.Services.AddSingleton<PromptCardService>();
 builder.Services.AddSingleton<GameRoomService>();
+builder.Services.AddHttpClient();
 builder.Services.AddSingleton<GameTimerService>();
 builder.Services.AddHostedService<RoomCleanupService>();
 

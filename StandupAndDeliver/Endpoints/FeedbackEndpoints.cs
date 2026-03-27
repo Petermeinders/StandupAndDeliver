@@ -1,6 +1,4 @@
 using System.Collections.Concurrent;
-using System.Net;
-using System.Net.Mail;
 using Microsoft.EntityFrameworkCore;
 using StandupAndDeliver.Data;
 using StandupAndDeliver.Models;
@@ -14,7 +12,7 @@ public static class FeedbackEndpoints
 
     public static void MapFeedbackEndpoints(this WebApplication app)
     {
-        app.MapPost("/api/feedback", async (FeedbackRequest req, IDbContextFactory<AppDbContext> dbFactory, IConfiguration config, HttpContext ctx, ILoggerFactory loggerFactory) =>
+        app.MapPost("/api/feedback", async (FeedbackRequest req, IDbContextFactory<AppDbContext> dbFactory, IConfiguration config, HttpContext ctx, ILoggerFactory loggerFactory, IHttpClientFactory httpClientFactory) =>
         {
             var logger = loggerFactory.CreateLogger("Feedback");
             var message = req.Message?.Trim();
@@ -40,41 +38,42 @@ public static class FeedbackEndpoints
             db.Feedback.Add(new FeedbackEntry { Message = message });
             await db.SaveChangesAsync();
 
-            // Send email via SMTP (best-effort)
-            var host = config["Smtp:Host"];
-            var toEmail = config["Smtp:ToEmail"];
-            var username = config["Smtp:Username"];
-            var password = config["Smtp:Password"];
+            // Send email via Resend (best-effort)
+            var apiKey = config["RESEND_API_KEY"] ?? config["Resend:ApiKey"];
+            var toEmail = config["Resend:ToEmail"];
+            var fromEmail = config["Resend:FromEmail"];
 
-            logger.LogInformation("SMTP config — Host: {Host}, ToEmail: {To}, Username: {User}, HasPassword: {HasPw}",
-                host ?? "(null)", toEmail ?? "(null)", username ?? "(null)", !string.IsNullOrEmpty(password));
-
-            if (!string.IsNullOrEmpty(host) && !string.IsNullOrEmpty(toEmail) && !string.IsNullOrEmpty(username))
+            if (!string.IsNullOrEmpty(apiKey) && !string.IsNullOrEmpty(toEmail) && !string.IsNullOrEmpty(fromEmail))
             {
                 try
                 {
-                    var port = int.TryParse(config["Smtp:Port"], out var p) ? p : 587;
-                    using var client = new SmtpClient(host, port)
+                    var payload = new
                     {
-                        EnableSsl = true,
-                        Credentials = new NetworkCredential(username, password)
+                        from = fromEmail,
+                        to = new[] { toEmail },
+                        subject = "New Standup & Deliver Feedback",
+                        text = $"New feedback received:\n\n{message}\n\nSubmitted: {DateTime.UtcNow:u}"
                     };
-                    var mail = new MailMessage(username, toEmail)
-                    {
-                        Subject = "New Standup & Deliver Feedback",
-                        Body = $"New feedback received:\n\n{message}\n\nSubmitted: {DateTime.UtcNow:u}"
-                    };
-                    await client.SendMailAsync(mail);
-                    logger.LogInformation("Feedback email sent successfully.");
+
+                    var http = httpClientFactory.CreateClient();
+                    using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.resend.com/emails");
+                    request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+                    request.Content = JsonContent.Create(payload);
+                    var response = await http.SendAsync(request);
+
+                    if (response.IsSuccessStatusCode)
+                        logger.LogInformation("Feedback email sent successfully.");
+                    else
+                        logger.LogWarning("Resend returned {Status}", response.StatusCode);
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "SMTP send failed");
+                    logger.LogError(ex, "Resend send failed");
                 }
             }
             else
             {
-                logger.LogWarning("SMTP not configured — email skipped.");
+                logger.LogWarning("Resend not configured — email skipped.");
             }
 
             return Results.Ok();
