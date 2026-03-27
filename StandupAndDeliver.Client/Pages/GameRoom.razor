@@ -46,7 +46,7 @@ else
             }
             else
             {
-                <WaitingView SkipTurnFunc="SkipTurn" />
+                <WaitingView SkipTurnFunc="SkipTurn" SendReactionFunc="SendReaction" />
             }
             break;
 
@@ -141,6 +141,12 @@ else
             InvokeAsync(StateHasChanged);
         });
 
+        _hub.On<string, string>("ReceiveReaction", (playerName, emoji) =>
+        {
+            GameState.AddReaction(playerName, emoji);
+            InvokeAsync(StateHasChanged);
+        });
+
         try
         {
             await _hub.StartAsync();
@@ -206,6 +212,12 @@ else
 
     private async Task<HubResult> AdvanceTurn() =>
         _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("AdvanceTurn");
+
+    private async Task SendReaction(string emoji)
+    {
+        if (_hub is not null)
+            await _hub.SendAsync("SendReaction", emoji);
+    }
 
     private void GoHome()
     {

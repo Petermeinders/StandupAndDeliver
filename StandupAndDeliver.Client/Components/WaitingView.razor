@@ -7,6 +7,10 @@
         <p class="text-gray-400 text-sm uppercase tracking-widest mb-2">Now speaking</p>
         <h2 class="text-3xl font-bold mb-6 text-yellow-400">@GameState.State?.ActivePlayerName</h2>
 
+        @{
+            var reactions = GameState.GetActiveReactions();
+        }
+
         @if (!GameState.State!.CardFlipped)
         {
             <div class="bg-gray-900 rounded-2xl p-8 mb-6 text-center">
@@ -16,11 +20,39 @@
         }
         else
         {
-            <div class="bg-gray-900 rounded-2xl p-8 mb-6">
+            <div class="bg-gray-900 rounded-2xl p-8 mb-4">
                 <p class="text-gray-400 text-sm mb-3">Time remaining</p>
                 <span class="text-6xl font-mono font-bold @TimerColour">@GameState.SecondsRemaining</span>
             </div>
-            <p class="text-gray-500 text-sm">Listen carefully — you'll be voting soon.</p>
+
+            @if (reactions.Count > 0)
+            {
+                <div class="flex flex-wrap gap-2 justify-center mb-4 min-h-8">
+                    @foreach (var r in reactions.TakeLast(6))
+                    {
+                        <span class="bg-gray-800 rounded-full px-3 py-1 text-sm flex items-center gap-1">
+                            <span>@r.Emoji</span>
+                            <span class="text-gray-400 text-xs">@r.PlayerName</span>
+                        </span>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="min-h-8 mb-4"></div>
+            }
+
+            <p class="text-gray-500 text-sm mb-3">Heckle the speaker</p>
+            <div class="flex gap-3 justify-center mb-6">
+                @foreach (var emoji in new[] { "👏", "😂", "🔥", "🤔", "💀" })
+                {
+                    var e = emoji;
+                    <button @onclick="() => OnReact(e)"
+                            class="text-2xl w-12 h-12 rounded-xl bg-gray-800 hover:bg-gray-700 active:scale-90 transition-all flex items-center justify-center">
+                        @emoji
+                    </button>
+                }
+            </div>
         }
 
         <ScoreBoard />
@@ -31,6 +63,7 @@
 
 @code {
     [Parameter, EditorRequired] public Func<Task<HubResult>> SkipTurnFunc { get; set; } = default!;
+    [Parameter, EditorRequired] public Func<string, Task> SendReactionFunc { get; set; } = default!;
 
     private string TimerColour => GameState.SecondsRemaining switch
     {
@@ -38,4 +71,6 @@
         <= 20 => "text-yellow-400",
         _ => "text-white"
     };
+
+    private async Task OnReact(string emoji) => await SendReactionFunc(emoji);
 }

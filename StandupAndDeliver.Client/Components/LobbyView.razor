@@ -1,10 +1,24 @@
 @inject GameStateService GameState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <div class="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center p-6">
     <div class="w-full max-w-md">
 
         <h1 class="text-3xl font-bold text-center mb-2">Standup & Deliver</h1>
-        <p class="text-center text-gray-400 mb-8">Room code: <span class="font-mono font-bold text-yellow-400 text-2xl tracking-widest">@GameState.State!.RoomCode</span></p>
+        <p class="text-center text-gray-400 mb-6">Room code: <span class="font-mono font-bold text-yellow-400 text-2xl tracking-widest">@GameState.State!.RoomCode</span></p>
+
+        <div class="bg-gray-900 rounded-2xl p-5 mb-6 flex flex-col items-center gap-3">
+            <p class="text-xs text-gray-400 uppercase tracking-widest">Scan to join</p>
+            <img src="@QrCodeUrl" alt="QR code to join room" class="rounded-xl w-40 h-40" />
+            <div class="flex items-center gap-2 w-full">
+                <span class="flex-1 bg-gray-800 rounded-lg px-3 py-2 text-xs text-gray-400 font-mono truncate">@JoinUrl</span>
+                <button @onclick="CopyJoinUrl" title="Copy link"
+                        class="px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs transition-all">
+                    @(_copied ? "✓" : "Copy")
+                </button>
+            </div>
+        </div>
 
         <div class="bg-gray-900 rounded-2xl p-6 mb-6">
             <h2 class="text-lg font-semibold mb-4 text-gray-300">Players (@GameState.State.Players.Count)</h2>
@@ -52,12 +66,28 @@
 
     private bool _isHost;
     private bool _starting;
+    private bool _copied;
     private string? _error;
+
+    private string JoinUrl =>
+        $"{Nav.BaseUri.TrimEnd('/')}?join={GameState.State?.RoomCode}";
+
+    private string QrCodeUrl =>
+        $"https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=10&data={Uri.EscapeDataString(JoinUrl)}";
 
     protected override void OnParametersSet()
     {
         _isHost = GameState.State?.Players
             .Any(p => p.Name == GameState.PlayerName && p.IsHost) ?? false;
+    }
+
+    private async Task CopyJoinUrl()
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", JoinUrl);
+        _copied = true;
+        await Task.Delay(2000);
+        _copied = false;
+        StateHasChanged();
     }
 
     private async Task OnStartGame()

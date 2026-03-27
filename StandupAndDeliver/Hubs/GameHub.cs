@@ -197,6 +197,23 @@ public class GameHub(GameRoomService gameRoomService, GameTimerService gameTimer
         return new HubResult(true);
     }
 
+    public async Task SendReaction(string emoji)
+    {
+        string[] allowed = ["👏", "😂", "🔥", "🤔", "💀"];
+        if (!allowed.Contains(emoji)) return;
+
+        var room = GetRoomForCaller();
+        if (room is null || room.Phase != GamePhase.SpeakerTurn) return;
+
+        var caller = room.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
+        if (caller is null) return;
+
+        // Speaker cannot react to themselves
+        if (room.Players[room.CurrentSpeakerIndex].ConnectionId == Context.ConnectionId) return;
+
+        await Clients.Group(room.RoomCode).ReceiveReaction(caller.Name, emoji);
+    }
+
     public async Task<HubResult> AdvanceTurn()
     {
         var room = GetRoomForCaller();

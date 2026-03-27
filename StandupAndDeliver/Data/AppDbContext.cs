@@ -6,4 +6,5 @@ namespace StandupAndDeliver.Data;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<PromptCard> PromptCards => Set<PromptCard>();
+    public DbSet<FeedbackEntry> Feedback => Set<FeedbackEntry>();
 }

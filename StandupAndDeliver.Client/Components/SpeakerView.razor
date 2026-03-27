@@ -5,6 +5,10 @@
 
         <p class="text-center text-gray-600 text-xs font-mono mb-6">Room: @GameState.State?.RoomCode</p>
 
+        @{
+            var reactions = GameState.GetActiveReactions();
+        }
+
         @if (!GameState.State!.CardFlipped)
         {
             <!-- Pre-flip: face-down card + tap prompt -->
@@ -39,7 +43,24 @@
                 </div>
             }
 
-            <p class="text-center text-gray-400 text-sm mb-6">Deliver your best standup. Everyone is watching.</p>
+            <p class="text-center text-gray-400 text-sm mb-3">Deliver your best standup. Everyone is watching.</p>
+
+            @if (reactions.Count > 0)
+            {
+                <div class="flex flex-wrap gap-2 justify-center mb-4">
+                    @foreach (var r in reactions.TakeLast(6))
+                    {
+                        <span class="bg-gray-800 rounded-full px-3 py-1 text-sm flex items-center gap-1 animate-bounce">
+                            <span>@r.Emoji</span>
+                            <span class="text-gray-400 text-xs">@r.PlayerName</span>
+                        </span>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="min-h-8 mb-4"></div>
+            }
 
             <div class="flex gap-3 mb-3">
                 <button @onclick="OnPauseResume"

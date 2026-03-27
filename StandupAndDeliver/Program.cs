@@ -73,5 +73,6 @@ app.MapHub<GameHub>("/gamehub", options =>
 
 app.MapHealthChecks("/health");
 app.MapAdminCardEndpoints();
+app.MapFeedbackEndpoints();
 
 app.Run();

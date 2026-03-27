@@ -7,4 +7,5 @@ public interface IGameClient
     Task ReceiveVoteCount(int submitted, int total);
     Task ReceivePhaseChange(GamePhase newPhase);
     Task ReceiveError(string message);
+    Task ReceiveReaction(string playerName, string emoji);
 }
