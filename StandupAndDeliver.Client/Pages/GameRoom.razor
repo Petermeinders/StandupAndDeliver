@@ -7,6 +7,8 @@
 
 <PageTitle>Standup & Deliver</PageTitle>
 
+<div class="landing-bg"></div>
+
 @if (_reconnecting)
 {
     <div class="fixed top-0 inset-x-0 z-50 bg-yellow-400 text-black text-center text-sm font-semibold py-2">
@@ -16,13 +18,13 @@
 
 @if (_connecting)
 {
-    <div class="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+    <div class="min-h-screen text-white flex items-center justify-center">
         <p class="text-gray-400 text-lg">Connecting…</p>
     </div>
 }
 else if (!string.IsNullOrEmpty(_fatalError))
 {
-    <div class="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center gap-4">
+    <div class="min-h-screen text-white flex flex-col items-center justify-center gap-4">
         <p class="text-red-400 text-lg">@_fatalError</p>
         <button @onclick="GoHome" class="px-6 py-3 bg-yellow-400 text-black rounded-xl font-bold hover:bg-yellow-300">
             Back to Home
@@ -81,7 +83,7 @@ else
             break;
 
         default:
-            <div class="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+            <div class="min-h-screen text-white flex items-center justify-center">
                 <p class="text-gray-400">Phase: @GameState.State?.Phase</p>
             </div>
             break;

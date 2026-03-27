@@ -30,11 +30,10 @@
     overflow: hidden;
 }
 
-/* Front = decorative back of card (what you see before flipping) */
+/* Front = electric card (what you see before flipping) */
 .card-face-front {
-    background-color: #1d3461;
-    border: 3px solid #2d4fa3;
-    box-shadow: 0 6px 28px rgba(0,0,0,0.6);
+    background: linear-gradient(-30deg, rgba(251,191,36,0.15), transparent, rgba(251,191,36,0.15)),
+                linear-gradient(to bottom, #0f172a, #0f172a);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -42,36 +41,112 @@
     gap: 0.5rem;
 }
 
-.card-face-front::before {
-    content: '';
+/* The actual electric border element — turbulence filter applied here */
+.electric-main-border {
     position: absolute;
-    inset: 10px;
-    border: 2px solid rgba(255,255,255,0.12);
-    border-radius: 0.75rem;
-    background-image: repeating-linear-gradient(
-        45deg,
-        transparent,
-        transparent 8px,
-        rgba(255,255,255,0.03) 8px,
-        rgba(255,255,255,0.03) 16px
-    );
+    inset: 0;
+    border: 2px solid #fbbf24;
+    border-radius: 1.25rem;
+    filter: url(#turbulent-displace);
     pointer-events: none;
 }
 
-.card-flip-scene:hover .card-face-front {
-    border-color: #fbbf24;
-    box-shadow: 0 6px 36px rgba(251,191,36,0.25);
+/* Soft inner glow ring */
+.electric-glow-1 {
+    position: absolute;
+    inset: 0;
+    border: 2px solid rgba(251, 191, 36, 0.6);
+    border-radius: 1.25rem;
+    filter: blur(1px);
+    pointer-events: none;
 }
 
-/* Back = yellow prompt card (revealed after flip) */
+/* Bright outer glow ring */
+.electric-glow-2 {
+    position: absolute;
+    inset: 0;
+    border: 2px solid #fbbf24;
+    border-radius: 1.25rem;
+    filter: blur(4px);
+    pointer-events: none;
+}
+
+/* Corner highlight overlays */
+.electric-overlay-1 {
+    position: absolute;
+    inset: 0;
+    border-radius: 1.25rem;
+    mix-blend-mode: overlay;
+    transform: scale(1.1);
+    filter: blur(16px);
+    background: linear-gradient(-30deg, white, transparent 30%, transparent 70%, white);
+    pointer-events: none;
+}
+
+.electric-overlay-2 {
+    position: absolute;
+    inset: 0;
+    border-radius: 1.25rem;
+    opacity: 0.5;
+    mix-blend-mode: overlay;
+    transform: scale(1.1);
+    filter: blur(16px);
+    background: linear-gradient(-30deg, white, transparent 30%, transparent 70%, white);
+    pointer-events: none;
+}
+
+/* Ambient glow behind card */
+.electric-bg-glow {
+    position: absolute;
+    inset: 0;
+    border-radius: 1.25rem;
+    filter: blur(32px);
+    transform: scale(1.1);
+    opacity: 0.3;
+    z-index: -1;
+    background: linear-gradient(-30deg, #fbbf24, transparent, #f59e0b);
+    pointer-events: none;
+}
+
+/* Card content sits above all effects */
+.electric-content {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    text-align: center;
+}
+
+/* Back = electric prompt card (revealed after flip) */
 .card-face-back {
-    background-color: #facc15;
+    background: linear-gradient(-30deg, rgba(251,191,36,0.15), transparent, rgba(251,191,36,0.15)),
+                linear-gradient(to bottom, #0f172a, #0f172a);
     transform: rotateY(180deg);
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 2rem;
-    box-shadow: 0 6px 28px rgba(0,0,0,0.4);
+}
+
+/* ── Landing page scrolling background ─────────────────────────────────── */
+@keyframes scrollBg {
+    from { transform: translateY(0); }
+    to   { transform: translateY(-400px); }
+}
+
+.landing-bg {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: calc(100% + 400px);
+    background-image: url('/OfficeBackground.jpg');
+    background-size: cover;
+    background-position: center top;
+    filter: blur(4px) brightness(0.35);
+    animation: scrollBg 30s linear infinite alternate;
+    z-index: 0;
 }
 
 /* ── Screen fade-in ─────────────────────────────────────────────────────── */

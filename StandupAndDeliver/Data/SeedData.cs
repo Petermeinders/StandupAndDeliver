@@ -44,7 +44,7 @@ public static class SeedData
             "Set up a recurring meeting to check in on the recurring meeting",
             "Left 10 voicemails to one person",
             "Googled office jokes and shared them with the team all day",
-            "Fliered with my coworker",
+            "Flirted with my coworker",
             "Made a spreadsheet to track something already in the system",
             "Clicked 'Reply All' by mistake and apologised to 47 people individually",
 
