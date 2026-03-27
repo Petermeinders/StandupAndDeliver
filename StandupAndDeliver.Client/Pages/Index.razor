@@ -15,13 +15,7 @@
         <h1 class="text-4xl font-bold text-center mb-2 text-yellow-400">Standup & Deliver</h1>
         <p class="text-center text-gray-400 mb-8 text-sm">The corporate party game for people who've sat through too many standups</p>
 
-        <div class="bg-gray-900 rounded-2xl p-6 mb-6 text-sm text-gray-400 space-y-3">
-            <p class="text-yellow-400 font-semibold text-base">How to play</p>
-            <p>Each round, one player draws a card with a mundane office task — something like <span class="text-gray-300 italic">"Refilled the water cooler"</span> or <span class="text-gray-300 italic">"Cleared a jam from the printer."</span></p>
-            <p>Their job? Deliver a completely <span class="text-gray-300 font-semibold">over-the-top standup update</span> about it — as if they spent the entire day heroically solving a crisis. Think big. Think corporate. Think insufferable.</p>
-            <p>Everyone else rates the performance and votes on whether the speaker actually did what they claimed, or just made the whole thing up.</p>
-            <p class="text-gray-500 text-xs">Points are awarded for impressiveness. Liars get nothing. The most convincing stretch of the truth wins.</p>
-        </div>
+        <GameReferenceAccordions HowToPlayDefaultOpen="true" ExampleDefaultOpen="false" />
 
         <div class="bg-gray-900 rounded-2xl mb-6 overflow-hidden">
             <button @onclick="() => _storyOpen = !_storyOpen"
@@ -43,7 +37,10 @@
         </div>
 
         <div class="bg-gray-900 rounded-2xl p-6 mb-4">
-            <h2 class="text-lg font-semibold mb-4 text-gray-300">Create a Room</h2>
+            <div class="flex items-baseline justify-between mb-4">
+                <h2 class="text-lg font-semibold text-gray-300">Create a Room</h2>
+                <span class="text-xs text-gray-500">Start here — you'll be the host</span>
+            </div>
             <div class="space-y-3">
                 <input
                     @bind="_createName"
@@ -69,7 +66,10 @@
         </div>
 
         <div class="bg-gray-900 rounded-2xl p-6">
-            <h2 class="text-lg font-semibold mb-4 text-gray-300">Join a Room</h2>
+            <div class="flex items-baseline justify-between mb-4">
+                <h2 class="text-lg font-semibold text-gray-300">Join a Room</h2>
+                <span class="text-xs text-gray-500">Ask the host for the room code</span>
+            </div>
             <div class="space-y-3">
                 <input
                     @bind="_joinCode"

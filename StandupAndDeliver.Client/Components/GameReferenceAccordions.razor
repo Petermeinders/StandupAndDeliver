@@ -1,0 +1,58 @@
+@* Reusable How to Play + Example accordions used on landing, speaker, and waiting screens *@
+
+<div class="bg-gray-900 bg-opacity-80 rounded-2xl mb-3 overflow-hidden">
+    <button @onclick="() => _howToPlayOpen = !_howToPlayOpen"
+            class="w-full flex items-center justify-between px-6 py-4 text-left">
+        <span class="font-semibold text-yellow-400">How to play</span>
+        <span class="text-gray-500 text-lg transition-transform @(_howToPlayOpen ? "rotate-180" : "")">▾</span>
+    </button>
+    @if (_howToPlayOpen)
+    {
+        <div class="px-6 pb-5 text-sm text-gray-400 space-y-3 border-t border-gray-800 pt-4">
+            <p>Each round, one player draws a card with a mundane office task — something like <span class="text-gray-300 italic">"Refilled the water cooler"</span> or <span class="text-gray-300 italic">"Cleared a jam from the printer."</span></p>
+            <p>Their job? Deliver a completely <span class="text-yellow-400 font-semibold">over-the-top standup update</span> about it — as if they spent the entire day heroically solving a crisis. Think big. Think corporate. Think insufferable.</p>
+            <p>Everyone else rates the performance and votes on whether the speaker actually did what they claimed, or just made the whole thing up.</p>
+            <p class="text-gray-500 text-xs">Points are awarded for impressiveness. Liars get nothing. The most convincing stretch of the truth wins.</p>
+        </div>
+    }
+</div>
+
+<div class="bg-gray-900 bg-opacity-80 rounded-2xl mb-3 overflow-hidden">
+    <button @onclick="() => _exampleOpen = !_exampleOpen"
+            class="w-full flex items-center justify-between px-6 py-4 text-left">
+        <span class="font-semibold text-gray-300">Example</span>
+        <span class="text-gray-500 text-lg transition-transform @(_exampleOpen ? "rotate-180" : "")">▾</span>
+    </button>
+    @if (_exampleOpen)
+    {
+        <div class="px-6 pb-5 text-sm text-gray-400 space-y-4 border-t border-gray-800 pt-4">
+            <div>
+                <p class="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-1">Card</p>
+                <p class="text-gray-200 italic">"Refilled the water cooler"</p>
+            </div>
+            <div>
+                <p class="text-xs font-semibold uppercase tracking-widest text-green-400 mb-1">✓ Good stretch (true, but inflated)</p>
+                <p class="text-gray-300">"I worked with maintenance to restock key supplies on floor 3 that hundreds of employees rely on daily."</p>
+            </div>
+            <div>
+                <p class="text-xs font-semibold uppercase tracking-widest text-red-400 mb-1">✗ Bad lie (not accurate to card)</p>
+                <p class="text-gray-300">"I improved productivity across the workforce through enhanced hydration initiatives company-wide."</p>
+            </div>
+            <p class="text-gray-500 text-xs">The goal is to stretch the truth, not fabricate it. Stay close enough to be believable. Your peers will judge you on how well you stretch the truth.</p>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public bool HowToPlayDefaultOpen { get; set; } = false;
+    [Parameter] public bool ExampleDefaultOpen { get; set; } = false;
+
+    private bool _howToPlayOpen;
+    private bool _exampleOpen;
+
+    protected override void OnInitialized()
+    {
+        _howToPlayOpen = HowToPlayDefaultOpen;
+        _exampleOpen = ExampleDefaultOpen;
+    }
+}
