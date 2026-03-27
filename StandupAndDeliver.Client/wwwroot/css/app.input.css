@@ -149,6 +149,143 @@
     z-index: 0;
 }
 
+/* ── Win95 Easter Egg Theme ─────────────────────────────────────────────── */
+
+/* Desktop teal tint overlay */
+body.theme-w95::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 128, 128, 0.18);
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* Shift the blurred bg to Win95 teal palette */
+body.theme-w95 .landing-bg {
+    filter: blur(3px) brightness(0.3) saturate(0.5) hue-rotate(155deg);
+}
+
+/* Global font + no rounded corners */
+body.theme-w95,
+body.theme-w95 * {
+    font-family: 'Tahoma', 'MS Sans Serif', Arial, sans-serif !important;
+    border-radius: 0 !important;
+    letter-spacing: normal !important;
+}
+
+/* Dark panels → raised Win95 gray window */
+body.theme-w95 .bg-gray-900,
+body.theme-w95 .bg-gray-800 {
+    background: #c0c0c0 !important;
+    border: 2px solid !important;
+    border-color: #ffffff #404040 #404040 #ffffff !important;
+    box-shadow: 1px 1px 0 #000, inset 1px 1px 0 #dfdfdf, inset -1px -1px 0 #808080 !important;
+    color: #000 !important;
+}
+
+/* Mid-gray panels (used in some card backgrounds) */
+body.theme-w95 .bg-gray-700 {
+    background: #c0c0c0 !important;
+    border: 2px solid !important;
+    border-color: #808080 #dfdfdf #dfdfdf #808080 !important;
+    color: #808080 !important;
+}
+
+/* Yellow accent: keep bright on dark backgrounds, go Win95 blue inside gray panels */
+body.theme-w95 .text-yellow-400 { color: #ffe680 !important; }
+body.theme-w95 .text-yellow-300 { color: #fff !important; }
+body.theme-w95 .text-yellow-600 { color: #ffe680 !important; }
+
+/* Inside gray panels, flip to dark readable text */
+body.theme-w95 .bg-gray-900 .text-white,
+body.theme-w95 .bg-gray-800 .text-white  { color: #000 !important; }
+body.theme-w95 .bg-gray-900 .text-gray-300,
+body.theme-w95 .bg-gray-800 .text-gray-300 { color: #000 !important; }
+body.theme-w95 .bg-gray-900 .text-gray-400,
+body.theme-w95 .bg-gray-800 .text-gray-400 { color: #404040 !important; }
+body.theme-w95 .bg-gray-900 .text-gray-500,
+body.theme-w95 .bg-gray-800 .text-gray-500 { color: #808080 !important; }
+body.theme-w95 .bg-gray-900 .text-gray-600,
+body.theme-w95 .bg-gray-800 .text-gray-600 { color: #808080 !important; }
+body.theme-w95 .bg-gray-900 .text-yellow-400,
+body.theme-w95 .bg-gray-800 .text-yellow-400 { color: #000080 !important; }
+body.theme-w95 .bg-gray-900 .text-yellow-600,
+body.theme-w95 .bg-gray-800 .text-yellow-600 { color: #000080 !important; }
+
+/* Hide the banner image in 90s mode */
+body.theme-w95 img[alt="Standup & Deliver"] { display: none !important; }
+
+/* Primary CTA buttons (yellow) → raised Win95 button */
+body.theme-w95 .bg-yellow-400,
+body.theme-w95 .hover\:bg-yellow-300:hover {
+    background: #c0c0c0 !important;
+    border: 2px solid !important;
+    border-color: #ffffff #404040 #404040 #ffffff !important;
+    box-shadow: inset 1px 1px 0 #dfdfdf, inset -1px -1px 0 #808080 !important;
+    color: #000 !important;
+}
+
+/* Secondary buttons (gray) → sunken Win95 listbox */
+body.theme-w95 .bg-gray-600 {
+    background: #c0c0c0 !important;
+    border: 2px solid !important;
+    border-color: #ffffff #404040 #404040 #ffffff !important;
+    box-shadow: inset 1px 1px 0 #dfdfdf, inset -1px -1px 0 #808080 !important;
+    color: #000 !important;
+}
+
+/* Selected score buttons */
+body.theme-w95 .bg-yellow-400.text-black {
+    background: #000080 !important;
+    color: #fff !important;
+    border-color: #000040 #8080c0 #8080c0 #000040 !important;
+}
+
+/* Input fields */
+body.theme-w95 input,
+body.theme-w95 textarea {
+    background: #fff !important;
+    border: 2px solid !important;
+    border-color: #808080 #dfdfdf #dfdfdf #808080 !important;
+    box-shadow: inset 1px 1px 0 #000 !important;
+    color: #000 !important;
+}
+body.theme-w95 input::placeholder,
+body.theme-w95 textarea::placeholder {
+    color: #808080 !important;
+}
+
+/* Red / green semantic colours */
+body.theme-w95 .text-red-400,
+body.theme-w95 .text-red-500 { color: #800000 !important; }
+body.theme-w95 .bg-red-500   { background: #800000 !important; color: #fff !important; }
+body.theme-w95 .text-green-400 { color: #006400 !important; }
+body.theme-w95 .bg-green-500  { background: #006400 !important; color: #fff !important; }
+
+/* Borders between rows */
+body.theme-w95 .border-gray-800,
+body.theme-w95 .border-gray-700 {
+    border-color: #808080 !important;
+}
+
+/* Divider lines inside panels */
+body.theme-w95 .border-t { border-color: #808080 !important; }
+
+/* Accordion headers → Win95 title bar */
+body.theme-w95 button.w-full.flex.items-center.justify-between {
+    background: linear-gradient(90deg, #000080, #1084d0) !important;
+    color: #fff !important;
+}
+body.theme-w95 button.w-full.flex.items-center.justify-between span {
+    color: #fff !important;
+}
+
+/* Overflow hidden card wrappers */
+body.theme-w95 .overflow-hidden {
+    overflow: visible !important;
+}
+
 /* ── Screen fade-in ─────────────────────────────────────────────────────── */
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(8px); }

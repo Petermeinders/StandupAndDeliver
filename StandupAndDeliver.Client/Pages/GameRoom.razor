@@ -3,6 +3,7 @@
 @inject GameStateService GameState
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject ThemeService Theme
 @implements IAsyncDisposable
 
 <PageTitle>Standup & Deliver</PageTitle>
@@ -103,6 +104,8 @@ else
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
+
+        await Theme.InitializeAsync();
 
         if (string.IsNullOrEmpty(GameState.PlayerName))
         {

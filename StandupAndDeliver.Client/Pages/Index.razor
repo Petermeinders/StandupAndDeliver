@@ -3,6 +3,7 @@
 @inject GameStateService GameState
 @inject NavigationManager Nav
 @inject HttpClient Http
+@inject ThemeService Theme
 
 <PageTitle>Standup & Deliver</PageTitle>
 
@@ -101,6 +102,14 @@
             }
         </div>
 
+        <!-- Easter egg theme toggle -->
+        <div class="mt-6 mb-2 text-center">
+            <button @onclick="OnToggleTheme"
+                    class="text-xs text-gray-600 hover:text-gray-400 transition-all px-3 py-2 rounded-lg">
+                @(Theme.IsW95 ? "🖥 Return to the Present" : "💾 Go Back to the 90s")
+            </button>
+        </div>
+
         <div class="bg-gray-900 rounded-2xl mt-4 overflow-hidden">
             <button @onclick="() => _feedbackOpen = !_feedbackOpen"
                     class="w-full flex items-center justify-between px-6 py-4 text-left">
@@ -161,12 +170,30 @@
     private string? _createError;
     private string? _joinError;
 
+    private bool _themeInitialized;
+
     protected override void OnParametersSet()
     {
         if (!string.IsNullOrEmpty(Join))
             _joinCode = Join.ToUpperInvariant();
         if (!string.IsNullOrEmpty(Error))
             _joinError = Error;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_themeInitialized)
+        {
+            _themeInitialized = true;
+            await Theme.InitializeAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnToggleTheme()
+    {
+        await Theme.ToggleAsync();
+        StateHasChanged();
     }
 
     private async Task OnCreate()
