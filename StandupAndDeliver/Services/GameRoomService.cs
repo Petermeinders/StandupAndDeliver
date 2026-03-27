@@ -26,6 +26,8 @@ public class GameRoomService
         var room = GetRoom(roomCode);
         if (room is null) return (null, new HubResult(false, "Room not found or has expired."));
         if (room.Phase != GamePhase.Lobby) return (null, new HubResult(false, "Game already in progress."));
+        if (room.Players.Any(p => p.Name.Equals(playerName, StringComparison.OrdinalIgnoreCase)))
+            return (null, new HubResult(false, "That name is already taken in this room."));
 
         var player = new Player { Name = playerName, ConnectionId = connectionId };
         room.Players.Add(player);

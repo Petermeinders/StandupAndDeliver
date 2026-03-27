@@ -9,8 +9,8 @@
             var reactions = GameState.GetActiveReactions();
         }
 
-        <!-- Header: changes based on flip state -->
-        <div class="text-center mb-6">
+        <!-- Header -->
+        <div class="text-center mb-4">
             <span class="text-xs font-semibold uppercase tracking-widest text-yellow-400">Your Turn</span>
             @if (GameState.State!.CardFlipped)
             {
@@ -21,30 +21,26 @@
             }
             else
             {
-                <p class="mt-2 text-gray-400 text-sm">Your card is ready. Tap it to reveal your task and start the clock.</p>
+                <p class="mt-2 text-gray-400 text-sm">Tap your card to reveal your task and start the clock.</p>
             }
         </div>
 
-        <!-- 3D Card flip -->
-        <div class="card-flip-scene mb-6">
+        <!-- 3D Card — entire card is the clickable element -->
+        <div class="card-flip-scene mb-6" @onclick="OnFlip">
             <div class="card-flip-inner @(GameState.State!.CardFlipped ? "flipped" : "")">
 
-                <!-- Back face: face-down card -->
-                <div class="card-face card-face-back">
-                    <button @onclick="OnFlip" disabled="@(_flipping || GameState.State!.CardFlipped)"
-                            class="w-full bg-gray-800 border-2 border-dashed border-gray-600 rounded-2xl p-12 text-center
-                                   hover:border-yellow-400 hover:bg-gray-700 transition-colors cursor-pointer active:scale-95">
-                        <p class="text-5xl mb-3">🃏</p>
-                        <p class="text-yellow-400 font-bold text-lg">@(_flipping ? "Flipping…" : "Tap to flip")</p>
-                        <p class="text-gray-500 text-xs mt-1">The timer starts when you flip</p>
-                    </button>
+                <!-- Front face (visible before flip): decorative card back -->
+                <div class="card-face card-face-front">
+                    <p class="text-4xl mb-2 relative z-10">🃏</p>
+                    <p class="text-yellow-300 font-bold text-lg relative z-10">@(_flipping ? "Flipping…" : "Tap to Flip")</p>
+                    <p class="text-blue-200 text-xs relative z-10 opacity-60">Timer starts on flip</p>
                 </div>
 
-                <!-- Front face: revealed card -->
-                <div class="card-face card-face-front">
-                    <div class="bg-yellow-400 text-black rounded-2xl p-8 text-center shadow-lg min-h-[160px] flex items-center justify-center">
-                        <p class="text-xl font-bold leading-snug">@(GameState.State?.PromptCardText ?? "")</p>
-                    </div>
+                <!-- Back face (visible after flip): prompt card -->
+                <div class="card-face card-face-back">
+                    <p class="text-xl font-bold text-black leading-snug text-center">
+                        @(GameState.State?.PromptCardText ?? "")
+                    </p>
                 </div>
 
             </div>
