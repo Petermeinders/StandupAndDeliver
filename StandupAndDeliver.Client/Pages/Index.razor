@@ -117,7 +117,7 @@
                     }
                     else
                     {
-                        <textarea @bind="_feedbackText"
+                        <textarea @bind="_feedbackText" @bind:event="oninput"
                                   placeholder="Type your feedback here…"
                                   rows="4"
                                   maxlength="2000"

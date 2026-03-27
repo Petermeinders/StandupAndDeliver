@@ -9,14 +9,14 @@ namespace StandupAndDeliver.Endpoints;
 
 public static class FeedbackEndpoints
 {
-    // IP -> list of submission timestamps in the current window
     private static readonly ConcurrentDictionary<string, List<DateTime>> _submissions = new();
     private const int MaxPerHour = 5;
 
     public static void MapFeedbackEndpoints(this WebApplication app)
     {
-        app.MapPost("/api/feedback", async (FeedbackRequest req, IDbContextFactory<AppDbContext> dbFactory, IConfiguration config, HttpContext ctx) =>
+        app.MapPost("/api/feedback", async (FeedbackRequest req, IDbContextFactory<AppDbContext> dbFactory, IConfiguration config, HttpContext ctx, ILoggerFactory loggerFactory) =>
         {
+            var logger = loggerFactory.CreateLogger("Feedback");
             var message = req.Message?.Trim();
             if (string.IsNullOrEmpty(message) || message.Length > 2000)
                 return Results.BadRequest("Message is required and must be under 2000 characters.");
@@ -46,6 +46,9 @@ public static class FeedbackEndpoints
             var username = config["Smtp:Username"];
             var password = config["Smtp:Password"];
 
+            logger.LogInformation("SMTP config — Host: {Host}, ToEmail: {To}, Username: {User}, HasPassword: {HasPw}",
+                host ?? "(null)", toEmail ?? "(null)", username ?? "(null)", !string.IsNullOrEmpty(password));
+
             if (!string.IsNullOrEmpty(host) && !string.IsNullOrEmpty(toEmail) && !string.IsNullOrEmpty(username))
             {
                 try
@@ -62,11 +65,16 @@ public static class FeedbackEndpoints
                         Body = $"New feedback received:\n\n{message}\n\nSubmitted: {DateTime.UtcNow:u}"
                     };
                     await client.SendMailAsync(mail);
+                    logger.LogInformation("Feedback email sent successfully.");
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Email failure is silent — feedback is already saved to DB
+                    logger.LogError(ex, "SMTP send failed");
                 }
+            }
+            else
+            {
+                logger.LogWarning("SMTP not configured — email skipped.");
             }
 
             return Results.Ok();
