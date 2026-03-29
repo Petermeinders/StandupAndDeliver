@@ -65,12 +65,6 @@ else
             </div>
             break;
 
-        case GamePhase.Reveal:
-            <div @key="GamePhase.Reveal" class="screen-fade">
-                <RevealView SubmitLieVoteFunc="SubmitLieVote" />
-            </div>
-            break;
-
         case GamePhase.Results:
             <div @key="GamePhase.Results" class="screen-fade">
                 <ResultsView AdvanceTurnFunc="AdvanceTurn" />
@@ -231,9 +225,6 @@ else
 
     private async Task<HubResult> SubmitImpressiveness(int rating) =>
         _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("SubmitImpressiveness", rating);
-
-    private async Task<HubResult> SubmitLieVote(bool lied) =>
-        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("SubmitLieVote", lied);
 
     private async Task<HubResult> AdvanceTurn() =>
         _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("AdvanceTurn");

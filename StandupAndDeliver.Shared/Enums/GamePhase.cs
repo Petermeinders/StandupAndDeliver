@@ -5,7 +5,6 @@ public enum GamePhase
     Lobby,
     SpeakerTurn,
     Voting,
-    Reveal,
     Results,
     GameOver
 }

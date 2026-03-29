@@ -10,5 +10,6 @@ public record GameStateDto(
     int VotesSubmitted,
     int VotesTotal,
     TurnResultDto? LastTurnResult,
-    bool CardFlipped = false
+    bool CardFlipped = false,
+    string? LastTranscript = null
 );

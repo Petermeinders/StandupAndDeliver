@@ -56,8 +56,8 @@ public class GameHub(GameRoomService gameRoomService, GameTimerService gameTimer
         var cardText = isActiveSpeaker
             ? await gameTimerService.GetActiveCardTextAsync(room.RoomCode) : null;
 
-        // On Reveal/Results, everyone sees the card
-        if (room.Phase is GamePhase.Reveal or GamePhase.Results)
+        // On Results, everyone sees the card
+        if (room.Phase is GamePhase.Results)
             cardText = await gameTimerService.GetActiveCardTextAsync(room.RoomCode);
 
         await Clients.Caller.ReceiveGameState(BuildStateDto(room, activeSpeaker?.ConnectionId, cardText));
@@ -160,29 +160,6 @@ public class GameHub(GameRoomService gameRoomService, GameTimerService gameTimer
         return new HubResult(true);
     }
 
-    public async Task<HubResult> SubmitLieVote(bool lied)
-    {
-        var room = GetRoomForCaller();
-        if (room is null) return new HubResult(false, "Room not found.");
-        if (room.Phase != GamePhase.Reveal) return new HubResult(false, "Not in reveal phase.");
-
-        var speaker = room.Players[room.CurrentSpeakerIndex];
-        if (speaker.ConnectionId == Context.ConnectionId)
-            return new HubResult(false, "The active speaker cannot vote on their own turn.");
-
-        await room.Lock.WaitAsync();
-        try
-        {
-            if (room.CurrentTurnLieVotes.ContainsKey(Context.ConnectionId))
-                return new HubResult(false, "You have already submitted your lie vote.");
-            room.CurrentTurnLieVotes[Context.ConnectionId] = lied;
-        }
-        finally { room.Lock.Release(); }
-
-        await gameTimerService.OnLieVoteSubmittedAsync(room);
-        return new HubResult(true);
-    }
-
     public async Task<HubResult> FlipCard()
     {
         var room = GetRoomForCaller();
@@ -204,10 +181,10 @@ public class GameHub(GameRoomService gameRoomService, GameTimerService gameTimer
         var room = GetRoomForCaller();
         if (room is null || room.Phase != GamePhase.SpeakerTurn) return;
 
-        // Only the active speaker can send a transcript
         var speaker = room.Players[room.CurrentSpeakerIndex];
         if (speaker.ConnectionId != Context.ConnectionId) return;
 
+        room.CurrentTranscript = text;
         await Clients.GroupExcept(room.RoomCode, Context.ConnectionId).ReceiveTranscript(text);
     }
 
@@ -294,6 +271,8 @@ public class GameHub(GameRoomService gameRoomService, GameTimerService gameTimer
             ? room.Players.FirstOrDefault(p => p.ConnectionId == activeSpeakerConnectionId)
             : null;
 
+        var includeTranscript = room.Phase is GamePhase.Voting or GamePhase.Results;
+
         return new GameStateDto(
             Phase: room.Phase,
             RoomCode: room.RoomCode,
@@ -304,7 +283,8 @@ public class GameHub(GameRoomService gameRoomService, GameTimerService gameTimer
             VotesSubmitted: room.CurrentTurnImpressiveness.Count,
             VotesTotal: room.Players.Count(p => p.IsConnected) - 1,
             LastTurnResult: lastTurnResult,
-            CardFlipped: room.CardFlipped
+            CardFlipped: room.CardFlipped,
+            LastTranscript: includeTranscript ? room.CurrentTranscript : null
         );
     }
 }

@@ -12,11 +12,9 @@ public class GameTimerService(
 {
     private const int TurnSeconds = 60;
     private const int VotingSeconds = 30;
-    private const int LieVoteSeconds = 30;
 
     private readonly Dictionary<string, CancellationTokenSource> _turnTimers = new();
     private readonly Dictionary<string, CancellationTokenSource> _voteTimers = new();
-    private readonly Dictionary<string, CancellationTokenSource> _lieVoteTimers = new();
     private readonly Dictionary<string, string> _activeCardText = new();
     private readonly Dictionary<string, int> _pausedSeconds = new();
     private readonly Dictionary<string, int> _currentSeconds = new(); // live tracking
@@ -41,7 +39,7 @@ public class GameTimerService(
         room.ActiveCardId = card.Id;
         room.UsedCardIds.Add(card.Id);
         room.CurrentTurnImpressiveness.Clear();
-        room.CurrentTurnLieVotes.Clear();
+        room.CurrentTranscript = "";
         room.CardFlipped = false;
         room.LastActivity = DateTime.UtcNow;
         _activeCardText[room.RoomCode] = card.Text;
@@ -114,40 +112,6 @@ public class GameTimerService(
         if (submitted >= eligible && eligible > 0)
         {
             CancelTimer(_voteTimers, room.RoomCode);
-            await TransitionToRevealAsync(room);
-        }
-    }
-
-    // ── Reveal (card shown + lie vote) ────────────────────────────────────────
-
-    public async Task TransitionToRevealAsync(GameRoom room)
-    {
-        CancelTimer(_voteTimers, room.RoomCode);
-        var cardText = _activeCardText.GetValueOrDefault(room.RoomCode, "");
-        var speaker = room.Players[room.CurrentSpeakerIndex];
-
-        room.Phase = GamePhase.Reveal;
-        room.LastActivity = DateTime.UtcNow;
-
-        await hubContext.Clients.Group(room.RoomCode)
-            .ReceiveGameState(GameHub.BuildStateDto(room, speaker.ConnectionId, cardText));
-
-        // Start lie vote window
-        var cts = new CancellationTokenSource();
-        _lieVoteTimers[room.RoomCode] = cts;
-        _ = RunLieVoteTimerAsync(room, LieVoteSeconds, cts.Token);
-    }
-
-    public async Task OnLieVoteSubmittedAsync(GameRoom room)
-    {
-        var eligible = room.Players.Count(p => p.IsConnected) - 1;
-        var submitted = room.CurrentTurnLieVotes.Count;
-
-        await hubContext.Clients.Group(room.RoomCode).ReceiveVoteCount(submitted, eligible);
-
-        if (submitted >= eligible && eligible > 0)
-        {
-            CancelTimer(_lieVoteTimers, room.RoomCode);
             await TransitionToResultsAsync(room);
         }
     }
@@ -156,27 +120,20 @@ public class GameTimerService(
 
     public async Task TransitionToResultsAsync(GameRoom room)
     {
-        CancelTimer(_lieVoteTimers, room.RoomCode);
+        CancelTimer(_voteTimers, room.RoomCode);
         var speaker = room.Players[room.CurrentSpeakerIndex];
         var cardText = _activeCardText.GetValueOrDefault(room.RoomCode, "");
-
-        var lieVotes = room.CurrentTurnLieVotes.Values.ToList();
-        var liedCount = lieVotes.Count(v => v);
-        var totalLieVotes = lieVotes.Count;
-        var majorityLied = totalLieVotes > 0 && liedCount > totalLieVotes / 2.0;
 
         var impressionValues = room.CurrentTurnImpressiveness.Values.ToList();
         var impressionScore = impressionValues.Count > 0
             ? Math.Round(impressionValues.Average(), 1) : 0.0;
-        var turnScore = majorityLied ? 0 : (int)Math.Round(impressionScore * 10);
+        var turnScore = (int)Math.Round(impressionScore * 10);
 
         speaker.Score += turnScore;
 
         var lastTurnResult = new TurnResultDto(
             ActivePlayerName: speaker.Name,
             PromptCardText: cardText,
-            LiedVoteCount: liedCount,
-            TotalVoteCount: totalLieVotes,
             ImpressionScore: impressionScore,
             TurnScore: turnScore
         );
@@ -229,7 +186,6 @@ public class GameTimerService(
     {
         CancelTimer(_turnTimers, roomCode);
         CancelTimer(_voteTimers, roomCode);
-        CancelTimer(_lieVoteTimers, roomCode);
     }
 
     private void StartTurnTimer(GameRoom room, int seconds)
@@ -277,25 +233,11 @@ public class GameTimerService(
             if (!ct.IsCancellationRequested)
             {
                 logger.LogInformation("Room {RoomCode}: impressiveness voting window expired.", room.RoomCode);
-                await TransitionToRevealAsync(room);
+                await TransitionToResultsAsync(room);
             }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { logger.LogError(ex, "Room {RoomCode}: voting timer error.", room.RoomCode); }
     }
 
-    private async Task RunLieVoteTimerAsync(GameRoom room, int seconds, CancellationToken ct)
-    {
-        try
-        {
-            await Task.Delay(TimeSpan.FromSeconds(seconds), ct);
-            if (!ct.IsCancellationRequested)
-            {
-                logger.LogInformation("Room {RoomCode}: lie vote window expired.", room.RoomCode);
-                await TransitionToResultsAsync(room);
-            }
-        }
-        catch (OperationCanceledException) { }
-        catch (Exception ex) { logger.LogError(ex, "Room {RoomCode}: lie vote timer error.", room.RoomCode); }
-    }
 }

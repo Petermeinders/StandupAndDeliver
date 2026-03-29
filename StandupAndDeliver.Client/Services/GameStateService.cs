@@ -17,8 +17,11 @@ public class GameStateService
 
     public void Update(GameStateDto state)
     {
-        // Clear transcript whenever we leave the speaker turn phase
-        if (State?.Phase == GamePhase.SpeakerTurn && state.Phase != GamePhase.SpeakerTurn)
+        // Pull transcript from state when entering Voting/Results (includes speaker's own view)
+        if (state.LastTranscript is not null)
+            CurrentTranscript = state.LastTranscript;
+        // Clear when a new speaker turn begins
+        else if (state.Phase == GamePhase.SpeakerTurn && State?.Phase != GamePhase.SpeakerTurn)
             CurrentTranscript = "";
 
         State = state;

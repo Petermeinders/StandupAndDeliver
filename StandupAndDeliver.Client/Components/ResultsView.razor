@@ -23,25 +23,12 @@
                     <span class="font-semibold">@result.ActivePlayerName</span>
                 </div>
                 <div class="flex justify-between items-center">
-                    <span class="text-gray-400 text-sm">Lie votes</span>
-                    <span class="font-semibold @(result.LiedVoteCount > result.TotalVoteCount / 2.0 ? "text-red-400" : "text-green-400")">
-                        @result.LiedVoteCount / @result.TotalVoteCount
-                    </span>
-                </div>
-                <div class="flex justify-between items-center">
                     <span class="text-gray-400 text-sm">Impressiveness</span>
                     <span class="font-semibold text-yellow-400">@result.ImpressionScore.ToString("F1")</span>
                 </div>
                 <div class="border-t border-gray-700 pt-4 flex justify-between items-center">
                     <span class="text-gray-300 font-semibold">Turn score</span>
-                    @if (result.TurnScore == 0 && result.LiedVoteCount > result.TotalVoteCount / 2.0)
-                    {
-                        <span class="text-red-400 font-bold text-lg">0 <span class="text-sm font-normal">(lie penalty)</span></span>
-                    }
-                    else
-                    {
-                        <span class="text-yellow-400 font-bold text-lg">+@result.TurnScore</span>
-                    }
+                    <span class="text-yellow-400 font-bold text-lg">+@result.TurnScore</span>
                 </div>
             </div>
         }
