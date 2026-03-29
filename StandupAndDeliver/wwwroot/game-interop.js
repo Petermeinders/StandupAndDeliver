@@ -16,15 +16,22 @@ window.gameInterop = {
             recognition.interimResults = true;
             recognition.lang = 'en-US';
 
-            // confirmedText  = all text from fully-closed sessions (never re-processed)
-            // sessionFinal   = final results within the CURRENT session only
-            // Both reset correctly on restart so re-recognized audio never duplicates
+            // confirmedText = locked-in text from all closed sessions (never re-processed)
+            // sessionFinals = sparse array indexed by result index for the current session
+            //   Using an array means re-firing the same index just overwrites — no duplication
             let confirmedText = '';
-            let sessionFinal = '';
-            let lastFinalIndex = -1;
+            let sessionFinals = [];
             let lastSentText = '';
             let sendTimer = null;
             let restartTimer = null;
+
+            function buildFull(interim) {
+                const parts = [confirmedText.trim()]
+                    .concat(sessionFinals.filter(Boolean).map(function (s) { return s.trim(); }))
+                    .concat(interim ? [interim.trim()] : [])
+                    .filter(Boolean);
+                return parts.join(' ');
+            }
 
             function sendFull(full) {
                 if (full === lastSentText) return;
@@ -42,17 +49,13 @@ window.gameInterop = {
                     let interim = '';
                     for (let i = event.resultIndex; i < event.results.length; i++) {
                         if (event.results[i].isFinal) {
-                            // Guard against Android re-firing already-processed final results
-                            if (i > lastFinalIndex) {
-                                sessionFinal += event.results[i][0].transcript + ' ';
-                                lastFinalIndex = i;
-                            }
+                            // Overwrite at index — safe against re-fires and corrections
+                            sessionFinals[i] = event.results[i][0].transcript;
                         } else {
                             interim = event.results[i][0].transcript;
                         }
                     }
-                    const full = (confirmedText + sessionFinal + interim).trim();
-                    sendFull(full);
+                    sendFull(buildFull(interim));
                 } catch (e) {
                     console.warn('[Transcript] onresult error:', e);
                 }
@@ -68,10 +71,10 @@ window.gameInterop = {
             recognition.onend = function () {
                 if (!gameInterop._recognitionActive) return;
                 // Lock in this session's finals before restarting
-                confirmedText = (confirmedText + sessionFinal).trimEnd();
+                var sessionText = sessionFinals.filter(Boolean).map(function (s) { return s.trim(); }).join(' ');
+                confirmedText = [confirmedText.trim(), sessionText].filter(Boolean).join(' ');
                 if (confirmedText) confirmedText += ' ';
-                sessionFinal = '';
-                lastFinalIndex = -1;
+                sessionFinals = [];
                 // Delay restart to reduce bing frequency on mobile
                 if (restartTimer) clearTimeout(restartTimer);
                 restartTimer = setTimeout(function () {
