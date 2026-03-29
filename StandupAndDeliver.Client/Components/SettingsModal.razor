@@ -1,0 +1,80 @@
+@inject SettingsService Settings
+@inject ThemeService Theme
+
+@if (_open)
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <!-- Backdrop -->
+        <div class="absolute inset-0 bg-black/70" @onclick="Close"></div>
+
+        <!-- Modal -->
+        <div class="relative bg-gray-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-lg font-bold text-white">Settings</h2>
+                <button @onclick="Close" class="text-gray-500 hover:text-white text-2xl leading-none">&times;</button>
+            </div>
+
+            <div class="space-y-5">
+
+                <!-- Mic toggle -->
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-semibold text-gray-200">Live transcript</p>
+                        <p class="text-xs text-gray-500 mt-0.5">Broadcasts your speech as you talk. Chrome &amp; Edge only.</p>
+                    </div>
+                    <button @onclick="ToggleMic"
+                            class="relative inline-flex h-6 w-11 flex-shrink-0 rounded-full transition-colors duration-200
+                                   @(Settings.MicEnabled ? "bg-yellow-400" : "bg-gray-700")">
+                        <span class="inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 mt-0.5
+                                     @(Settings.MicEnabled ? "translate-x-5" : "translate-x-0.5")"></span>
+                    </button>
+                </div>
+
+                <div class="border-t border-gray-800"></div>
+
+                <!-- Theme easter egg -->
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-semibold text-gray-200">Retro mode</p>
+                        <p class="text-xs text-gray-500 mt-0.5">Go back to the 90s.</p>
+                    </div>
+                    <button @onclick="ToggleTheme"
+                            class="relative inline-flex h-6 w-11 flex-shrink-0 rounded-full transition-colors duration-200
+                                   @(Theme.IsW95 ? "bg-yellow-400" : "bg-gray-700")">
+                        <span class="inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 mt-0.5
+                                     @(Theme.IsW95 ? "translate-x-5" : "translate-x-0.5")"></span>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _open;
+
+    public void Open()
+    {
+        _open = true;
+        StateHasChanged();
+    }
+
+    private void Close()
+    {
+        _open = false;
+        StateHasChanged();
+    }
+
+    private async Task ToggleMic()
+    {
+        await Settings.SetMicEnabledAsync(!Settings.MicEnabled);
+        StateHasChanged();
+    }
+
+    private async Task ToggleTheme()
+    {
+        await Theme.ToggleAsync();
+        StateHasChanged();
+    }
+}

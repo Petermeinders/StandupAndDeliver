@@ -1,5 +1,6 @@
 @inject GameStateService GameState
 @inject IJSRuntime JS
+@inject SettingsService Settings
 @implements IAsyncDisposable
 
 <div class="min-h-screen text-white flex flex-col items-center justify-center p-6">
@@ -221,6 +222,7 @@
 
     private async Task StartMicAsync()
     {
+        if (!Settings.MicEnabled) return;
         try
         {
             _dotNetRef = DotNetObjectReference.Create(this);

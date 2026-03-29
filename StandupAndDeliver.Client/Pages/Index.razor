@@ -4,12 +4,23 @@
 @inject NavigationManager Nav
 @inject HttpClient Http
 @inject ThemeService Theme
+@inject SettingsService Settings
 
 <PageTitle>Standup & Deliver</PageTitle>
+
+<SettingsModal @ref="_settingsModal" />
 
 <div class="landing-bg"></div>
 <div class="min-h-screen text-white flex flex-col items-center justify-center p-6 relative z-10">
     <div class="w-full max-w-md">
+
+        <div class="flex justify-end mb-2">
+            <button @onclick="() => _settingsModal!.Open()"
+                    class="text-gray-500 hover:text-gray-300 transition-all p-2 rounded-lg"
+                    title="Settings">
+                ⚙
+            </button>
+        </div>
 
         <img src="StandupAndDeliverBanner.jpg" alt="Standup & Deliver" class="w-full rounded-2xl mb-6 shadow-lg" />
 
@@ -102,14 +113,6 @@
             }
         </div>
 
-        <!-- Easter egg theme toggle -->
-        <div class="mt-6 mb-2 text-center">
-            <button @onclick="OnToggleTheme"
-                    class="text-xs text-gray-600 hover:text-gray-400 transition-all px-3 py-2 rounded-lg">
-                @(Theme.IsW95 ? "🖥 Return to the Present" : "💾 Go Back to the 90s")
-            </button>
-        </div>
-
         <div class="bg-gray-900 rounded-2xl mt-4 overflow-hidden">
             <button @onclick="() => _feedbackOpen = !_feedbackOpen"
                     class="w-full flex items-center justify-between px-6 py-4 text-left">
@@ -171,6 +174,7 @@
     private string? _joinError;
 
     private bool _themeInitialized;
+    private SettingsModal? _settingsModal;
 
     protected override void OnParametersSet()
     {
@@ -186,14 +190,9 @@
         {
             _themeInitialized = true;
             await Theme.InitializeAsync();
+            await Settings.InitializeAsync();
             StateHasChanged();
         }
-    }
-
-    private async Task OnToggleTheme()
-    {
-        await Theme.ToggleAsync();
-        StateHasChanged();
     }
 
     private async Task OnCreate()
