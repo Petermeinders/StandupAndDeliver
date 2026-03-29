@@ -17,7 +17,9 @@ window.gameInterop = {
             recognition.lang = 'en-US';
 
             let finalTranscript = '';
+            let lastSentText = '';
             let sendTimer = null;
+            let restartTimer = null;
 
             recognition.onresult = function (event) {
                 try {
@@ -30,10 +32,11 @@ window.gameInterop = {
                         }
                     }
                     const full = (finalTranscript + interim).trim();
-                    console.log('[Transcript] result:', full);
+                    if (full === lastSentText) return; // nothing new
                     if (sendTimer) clearTimeout(sendTimer);
                     sendTimer = setTimeout(function () {
                         if (!gameInterop._recognitionActive) return;
+                        lastSentText = full;
                         dotNetRef.invokeMethodAsync('OnTranscriptUpdate', full)
                             .catch(function (err) { console.warn('[Transcript] invokeMethodAsync error:', err); });
                     }, 300);
@@ -50,11 +53,18 @@ window.gameInterop = {
             };
 
             recognition.onend = function () {
-                if (gameInterop._recognitionActive) {
+                if (!gameInterop._recognitionActive) return;
+                // Delay restart to avoid rapid bing-bing on mobile.
+                // Reset finalTranscript to lastSentText so restarted session
+                // doesn't re-add words that were already transcribed.
+                if (restartTimer) clearTimeout(restartTimer);
+                restartTimer = setTimeout(function () {
+                    if (!gameInterop._recognitionActive) return;
+                    finalTranscript = lastSentText ? lastSentText + ' ' : '';
                     try { recognition.start(); } catch (e) {
                         console.warn('[Transcript] restart failed:', e);
                     }
-                }
+                }, 1500);
             };
 
             gameInterop._recognition = recognition;
@@ -76,6 +86,7 @@ window.gameInterop = {
             gameInterop._recognition = null;
         }
     },
+
 
     isSpeechRecognitionSupported: function () {
         return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
