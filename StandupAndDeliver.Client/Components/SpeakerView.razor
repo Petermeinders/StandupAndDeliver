@@ -221,8 +221,16 @@
 
     private async Task StartMicAsync()
     {
-        _dotNetRef = DotNetObjectReference.Create(this);
-        _micActive = await JS.InvokeAsync<bool>("gameInterop.startSpeechRecognition", _dotNetRef);
+        try
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            _micActive = await JS.InvokeAsync<bool>("gameInterop.startSpeechRecognition", _dotNetRef);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Transcript] mic init failed: {ex.Message}");
+            _micActive = false;
+        }
     }
 
     private async Task StopMicAsync()
