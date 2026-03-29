@@ -83,14 +83,15 @@ window.gameInterop = {
                 confirmedText = [confirmedText.trim(), sessionText].filter(Boolean).join(' ');
                 if (confirmedText) confirmedText += ' ';
                 sessionFinals = [];
-                // Delay restart to reduce bing frequency on mobile
+                // Restart as fast as possible to minimise the gap where words get missed.
+                // A small delay (100ms) avoids "already started" errors from rapid stop/start.
                 if (restartTimer) clearTimeout(restartTimer);
                 restartTimer = setTimeout(function () {
                     if (!gameInterop._recognitionActive) return;
                     try { recognition.start(); } catch (e) {
                         console.warn('[Transcript] restart failed:', e);
                     }
-                }, 1500);
+                }, 100);
             };
 
             gameInterop._recognition = recognition;
