@@ -49,8 +49,16 @@ window.gameInterop = {
                     let interim = '';
                     for (let i = event.resultIndex; i < event.results.length; i++) {
                         if (event.results[i].isFinal) {
-                            // Overwrite at index — safe against re-fires and corrections
-                            sessionFinals[i] = event.results[i][0].transcript;
+                            var next = event.results[i][0].transcript.trim();
+                            var prev = sessionFinals.filter(Boolean).map(function (s) { return s.trim(); }).join(' ');
+                            if (prev.length > 0 && next.toLowerCase().startsWith(prev.toLowerCase())) {
+                                // Android cumulative mode: each final contains ALL text since session start.
+                                // Collapse to a single entry to avoid joining duplicates.
+                                sessionFinals = [next];
+                            } else {
+                                // Desktop incremental mode: each final is only the new words.
+                                sessionFinals[i] = next;
+                            }
                         } else {
                             interim = event.results[i][0].transcript;
                         }
