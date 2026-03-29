@@ -21,6 +21,7 @@ window.gameInterop = {
             // Both reset correctly on restart so re-recognized audio never duplicates
             let confirmedText = '';
             let sessionFinal = '';
+            let lastFinalIndex = -1;
             let lastSentText = '';
             let sendTimer = null;
             let restartTimer = null;
@@ -41,7 +42,11 @@ window.gameInterop = {
                     let interim = '';
                     for (let i = event.resultIndex; i < event.results.length; i++) {
                         if (event.results[i].isFinal) {
-                            sessionFinal += event.results[i][0].transcript + ' ';
+                            // Guard against Android re-firing already-processed final results
+                            if (i > lastFinalIndex) {
+                                sessionFinal += event.results[i][0].transcript + ' ';
+                                lastFinalIndex = i;
+                            }
                         } else {
                             interim = event.results[i][0].transcript;
                         }
@@ -66,6 +71,7 @@ window.gameInterop = {
                 confirmedText = (confirmedText + sessionFinal).trimEnd();
                 if (confirmedText) confirmedText += ' ';
                 sessionFinal = '';
+                lastFinalIndex = -1;
                 // Delay restart to reduce bing frequency on mobile
                 if (restartTimer) clearTimeout(restartTimer);
                 restartTimer = setTimeout(function () {
