@@ -48,7 +48,7 @@ else
                 <div @key="@((GamePhase.SpeakerTurn, "speaker"))" class="screen-fade">
                     <SpeakerView EndTurnFunc="EndTurn" PauseTurnFunc="PauseTurn"
                                  ResumeTurnFunc="ResumeTurn" SkipTurnFunc="SkipTurn"
-                                 FlipCardFunc="FlipCard" />
+                                 FlipCardFunc="FlipCard" SendTranscriptFunc="SendTranscript" />
                 </div>
             }
             else
@@ -166,6 +166,12 @@ else
             InvokeAsync(StateHasChanged);
         });
 
+        _hub.On<string>("ReceiveTranscript", text =>
+        {
+            GameState.UpdateTranscript(text);
+            InvokeAsync(StateHasChanged);
+        });
+
         try
         {
             await _hub.StartAsync();
@@ -236,6 +242,12 @@ else
     {
         if (_hub is not null)
             await _hub.SendAsync("SendReaction", emoji);
+    }
+
+    private async Task SendTranscript(string text)
+    {
+        if (_hub is not null)
+            await _hub.SendAsync("SendTranscript", text);
     }
 
     private void GoHome()

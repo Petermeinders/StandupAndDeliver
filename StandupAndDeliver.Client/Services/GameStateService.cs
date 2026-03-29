@@ -12,11 +12,24 @@ public class GameStateService
 
     private readonly List<ReactionItem> _reactions = [];
 
+    public string CurrentTranscript { get; private set; } = "";
+    public event Action? OnTranscriptUpdated;
+
     public void Update(GameStateDto state)
     {
+        // Clear transcript whenever we leave the speaker turn phase
+        if (State?.Phase == GamePhase.SpeakerTurn && state.Phase != GamePhase.SpeakerTurn)
+            CurrentTranscript = "";
+
         State = state;
         if (state.SecondsRemaining.HasValue)
             SecondsRemaining = state.SecondsRemaining.Value;
+    }
+
+    public void UpdateTranscript(string text)
+    {
+        CurrentTranscript = text;
+        OnTranscriptUpdated?.Invoke();
     }
 
     public void UpdateTimer(int seconds) => SecondsRemaining = seconds;
@@ -46,6 +59,7 @@ public class GameStateService
         State = null;
         PlayerName = null;
         SecondsRemaining = 0;
+        CurrentTranscript = "";
         _reactions.Clear();
     }
 }

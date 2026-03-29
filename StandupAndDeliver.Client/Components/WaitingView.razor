@@ -1,4 +1,5 @@
 @inject GameStateService GameState
+@implements IDisposable
 
 <div class="min-h-screen text-white flex flex-col items-center justify-center p-6">
     <div class="w-full max-w-md text-center">
@@ -42,6 +43,16 @@
                 <div class="min-h-8 mb-4"></div>
             }
 
+            @if (!string.IsNullOrWhiteSpace(GameState.CurrentTranscript))
+            {
+                <div class="bg-gray-900 rounded-2xl p-4 mb-4 text-left">
+                    <p class="text-xs text-gray-500 uppercase tracking-widest mb-2 flex items-center gap-1">
+                        <span class="text-red-400 animate-pulse">🎙</span> Live transcript
+                    </p>
+                    <p class="text-gray-200 text-sm leading-relaxed">@GameState.CurrentTranscript</p>
+                </div>
+            }
+
             <p class="text-gray-500 text-sm mb-3">Heckle the speaker</p>
             <div class="flex gap-3 justify-center mb-6">
                 @foreach (var emoji in new[] { "👏", "😂", "🔥", "🤔", "💀" })
@@ -75,6 +86,18 @@
         <= 20 => "text-yellow-400",
         _ => "text-white"
     };
+
+    protected override void OnInitialized()
+    {
+        GameState.OnTranscriptUpdated += OnTranscriptUpdated;
+    }
+
+    private void OnTranscriptUpdated() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        GameState.OnTranscriptUpdated -= OnTranscriptUpdated;
+    }
 
     private async Task OnReact(string emoji) => await SendReactionFunc(emoji);
 }

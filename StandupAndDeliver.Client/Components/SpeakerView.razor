@@ -1,4 +1,6 @@
 @inject GameStateService GameState
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <div class="min-h-screen text-white flex flex-col items-center justify-center p-6">
     <div class="w-full max-w-md">
@@ -13,7 +15,13 @@
 
         <!-- Header -->
         <div class="text-center mb-4">
-            <span class="text-xs font-semibold uppercase tracking-widest text-yellow-400">Your Turn</span>
+            <div class="flex items-center justify-center gap-2">
+                <span class="text-xs font-semibold uppercase tracking-widest text-yellow-400">Your Turn</span>
+                @if (_micActive)
+                {
+                    <span class="text-xs text-red-400 animate-pulse">🎙 Live</span>
+                }
+            </div>
             @if (GameState.State!.CardFlipped)
             {
                 <div class="mt-2 flex items-center justify-center gap-2">
@@ -84,6 +92,22 @@
                 <div class="min-h-8 mb-4"></div>
             }
 
+            @if (!string.IsNullOrWhiteSpace(_localTranscript))
+            {
+                <div class="bg-gray-900 rounded-2xl p-4 mb-4 text-left">
+                    <p class="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                        <span class="text-red-400">🎙</span> Others can read this live
+                    </p>
+                    <p class="text-gray-300 text-sm leading-relaxed">@_localTranscript</p>
+                </div>
+            }
+            else if (_micActive)
+            {
+                <div class="bg-gray-900 rounded-2xl p-3 mb-4 text-center">
+                    <p class="text-xs text-gray-500 animate-pulse">🎙 Listening…</p>
+                </div>
+            }
+
             <div class="flex gap-3 mb-3">
                 <button @onclick="OnPauseResume"
                         class="flex-1 py-3 rounded-xl font-semibold transition-all
@@ -121,6 +145,7 @@
     [Parameter, EditorRequired] public Func<Task<HubResult>> PauseTurnFunc { get; set; } = default!;
     [Parameter, EditorRequired] public Func<Task<HubResult>> ResumeTurnFunc { get; set; } = default!;
     [Parameter, EditorRequired] public Func<Task<HubResult>> SkipTurnFunc { get; set; } = default!;
+    [Parameter, EditorRequired] public Func<string, Task> SendTranscriptFunc { get; set; } = default!;
 
     private bool _isHost;
     private bool _flipping;
@@ -128,6 +153,9 @@
     private bool _ending;
     private bool _skipping;
     private string? _error;
+    private bool _micActive;
+    private string _localTranscript = "";
+    private DotNetObjectReference<SpeakerView>? _dotNetRef;
 
     private string TimerColour => _paused ? "text-gray-400" : GameState.SecondsRemaining switch
     {
@@ -147,12 +175,16 @@
         _flipping = true;
         _error = null;
         var result = await FlipCardFunc();
-        if (!result.Success) _error = result.Error;
+        if (result.Success)
+            await StartMicAsync();
+        else
+            _error = result.Error;
         _flipping = false;
     }
 
     private async Task OnDone()
     {
+        await StopMicAsync();
         _ending = true;
         _error = null;
         var result = await EndTurnFunc();
@@ -179,10 +211,40 @@
 
     private async Task OnSkip()
     {
+        await StopMicAsync();
         _skipping = true;
         _error = null;
         var result = await SkipTurnFunc();
         if (!result.Success) _error = result.Error;
         _skipping = false;
+    }
+
+    private async Task StartMicAsync()
+    {
+        _dotNetRef = DotNetObjectReference.Create(this);
+        _micActive = await JS.InvokeAsync<bool>("gameInterop.startSpeechRecognition", _dotNetRef);
+    }
+
+    private async Task StopMicAsync()
+    {
+        if (_micActive)
+        {
+            await JS.InvokeVoidAsync("gameInterop.stopSpeechRecognition");
+            _micActive = false;
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnTranscriptUpdate(string text)
+    {
+        _localTranscript = text;
+        await InvokeAsync(StateHasChanged);
+        await SendTranscriptFunc(text);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await StopMicAsync();
+        _dotNetRef?.Dispose();
     }
 }

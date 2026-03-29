@@ -8,4 +8,5 @@ public interface IGameClient
     Task ReceivePhaseChange(GamePhase newPhase);
     Task ReceiveError(string message);
     Task ReceiveReaction(string playerName, string emoji);
+    Task ReceiveTranscript(string text);
 }
