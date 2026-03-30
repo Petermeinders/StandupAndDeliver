@@ -20,7 +20,10 @@ public class PromptCardService(IDbContextFactory<AppDbContext> dbFactory, ILogge
             return null;
         }
 
-        return available[Random.Shared.Next(available.Count)];
+        var card = available[Random.Shared.Next(available.Count)];
+        var (verb, adj, noun) = CorporateBsData.PickRandom();
+        card.Text = $"{card.Text}|||{verb}|{adj}|{noun}";
+        return card;
     }
 
     public async Task<List<PromptCard>> GetAllCardsAsync()

@@ -65,9 +65,23 @@
                     <div class="electric-overlay-2"></div>
                     <div class="electric-bg-glow"></div>
                     <div class="electric-content px-8">
+                        @{
+                            var cardParts = (GameState.State?.PromptCardText ?? "").Split("|||");
+                            var promptText = cardParts[0];
+                            var buzzParts = cardParts.Length > 1 ? cardParts[1].Split('|') : null;
+                        }
                         <p class="text-xl font-bold text-yellow-300 leading-snug text-center" style="text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0 2px 0 #000, 0 -2px 0 #000, 2px 0 0 #000, -2px 0 0 #000;">
-                            @(GameState.State?.PromptCardText ?? "")
+                            @promptText
                         </p>
+                        @if (buzzParts is { Length: 3 })
+                        {
+                            <div class="mt-3 flex flex-wrap gap-1 justify-center">
+                                <span class="text-xs text-gray-400 w-full text-center mb-1">Helpful words</span>
+                                <span class="bg-black/40 text-yellow-200 text-xs font-mono px-2 py-1 rounded">@buzzParts[0]</span>
+                                <span class="bg-black/40 text-yellow-200 text-xs font-mono px-2 py-1 rounded">@buzzParts[1]</span>
+                                <span class="bg-black/40 text-yellow-200 text-xs font-mono px-2 py-1 rounded">@buzzParts[2]</span>
+                            </div>
+                        }
                     </div>
                 </div>
 
