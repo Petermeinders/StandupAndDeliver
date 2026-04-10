@@ -1,5 +1,6 @@
 @inject NavigationManager Nav
 @inject GameStateService GameState
+@inject SavedSessionService SavedSession
 
 <div class="mt-6 text-center">
     <button @onclick="OnLeave"
@@ -9,8 +10,9 @@
 </div>
 
 @code {
-    private void OnLeave()
+    private async Task OnLeave()
     {
+        await SavedSession.ClearAsync();
         GameState.Clear();
         Nav.NavigateTo("/");
     }

@@ -5,6 +5,7 @@
 @inject HttpClient Http
 @inject ThemeService Theme
 @inject SettingsService Settings
+@inject IJSRuntime JS
 
 <PageTitle>Standup & Deliver</PageTitle>
 
@@ -47,6 +48,21 @@
                 </div>
             }
         </div>
+
+        @if (!string.IsNullOrEmpty(_resumeCode))
+        {
+            <div class="bg-yellow-400/10 border border-yellow-400/30 rounded-2xl p-5 mb-4">
+                <p class="text-xs text-yellow-400 font-semibold uppercase tracking-widest mb-1">Resume Last Session</p>
+                <p class="text-gray-300 text-sm mb-3">
+                    Room <span class="font-mono font-bold text-white">@_resumeCode</span>
+                    &nbsp;·&nbsp; @_resumeName
+                </p>
+                <button @onclick="OnResume"
+                        class="w-full py-3 rounded-xl font-bold bg-yellow-400 text-black hover:bg-yellow-300 transition-all">
+                    Rejoin Game
+                </button>
+            </div>
+        }
 
         <div class="bg-gray-900 rounded-2xl p-6 mb-4">
             <div class="flex items-baseline justify-between mb-4">
@@ -175,6 +191,8 @@
 
     private bool _themeInitialized;
     private SettingsModal? _settingsModal;
+    private string? _resumeCode;
+    private string? _resumeName;
 
     protected override void OnParametersSet()
     {
@@ -191,8 +209,34 @@
             _themeInitialized = true;
             await Theme.InitializeAsync();
             await Settings.InitializeAsync();
+
+            // Check for a saved session the player can jump back into
+            try
+            {
+                var code = await JS.InvokeAsync<string?>("localStorage.getItem", "sad_room");
+                var name = await JS.InvokeAsync<string?>("localStorage.getItem", "sad_name");
+                if (!string.IsNullOrEmpty(code) && !string.IsNullOrEmpty(name))
+                {
+                    _resumeCode = code;
+                    _resumeName = name;
+                }
+                else
+                {
+                    _resumeCode = null;
+                    _resumeName = null;
+                }
+            }
+            catch { /* localStorage unavailable */ }
+
             StateHasChanged();
         }
+    }
+
+    private void OnResume()
+    {
+        if (string.IsNullOrEmpty(_resumeCode) || string.IsNullOrEmpty(_resumeName)) return;
+        GameState.PlayerName = _resumeName;
+        Nav.NavigateTo($"/room?action=rejoin&code={_resumeCode}");
     }
 
     private async Task OnCreate()

@@ -24,6 +24,18 @@ public class GameStateService
         else if (state.Phase == GamePhase.SpeakerTurn && State?.Phase != GamePhase.SpeakerTurn)
             CurrentTranscript = "";
 
+        // Preserve card text if the same speaker is still active and the incoming state has none.
+        // This guards against a server broadcast that omits card text (e.g. when another player
+        // disconnects) wiping the active speaker's prompt mid-turn.
+        if (state.Phase == GamePhase.SpeakerTurn
+            && state.PromptCardText is null
+            && State?.Phase == GamePhase.SpeakerTurn
+            && State.ActivePlayerName == state.ActivePlayerName
+            && State.PromptCardText is not null)
+        {
+            state = state with { PromptCardText = State.PromptCardText };
+        }
+
         State = state;
         if (state.SecondsRemaining.HasValue)
             SecondsRemaining = state.SecondsRemaining.Value;

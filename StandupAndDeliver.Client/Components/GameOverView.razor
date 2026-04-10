@@ -1,5 +1,6 @@
 @inject GameStateService GameState
 @inject NavigationManager Nav
+@inject SavedSessionService SavedSession
 
 <div class="min-h-screen text-white flex flex-col items-center justify-center p-6">
     <div class="w-full max-w-md">
@@ -44,7 +45,7 @@
             }
         </div>
 
-        <button @onclick="GoHome"
+        <button @onclick="GoHomeAsync"
                 class="w-full py-4 rounded-xl font-bold text-lg bg-yellow-400 text-black hover:bg-yellow-300 transition-all">
             Back to Home
         </button>
@@ -53,8 +54,9 @@
 </div>
 
 @code {
-    private void GoHome()
+    private async Task GoHomeAsync()
     {
+        await SavedSession.ClearAsync();
         GameState.Clear();
         Nav.NavigateTo("/");
     }

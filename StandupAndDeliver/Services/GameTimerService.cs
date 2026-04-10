@@ -26,6 +26,24 @@ public class GameTimerService(
         CancelAll(room.RoomCode);
         _pausedSeconds.Remove(room.RoomCode);
 
+        // Skip any disconnected players whose turn it is, so the game doesn't stall
+        // waiting for a card flip that will never come.
+        while (room.CurrentSpeakerIndex < room.Players.Count
+               && !room.Players[room.CurrentSpeakerIndex].IsConnected)
+        {
+            logger.LogInformation("Room {RoomCode}: speaker {Name} is disconnected — skipping their turn.",
+                room.RoomCode, room.Players[room.CurrentSpeakerIndex].Name);
+            room.CurrentSpeakerIndex++;
+        }
+
+        if (room.CurrentSpeakerIndex >= room.Players.Count)
+        {
+            room.Phase = GamePhase.GameOver;
+            room.LastActivity = DateTime.UtcNow;
+            await hubContext.Clients.Group(room.RoomCode).ReceiveGameState(GameHub.BuildStateDto(room));
+            return;
+        }
+
         var card = await promptCardService.DrawCardAsync(room.UsedCardIds);
         if (card is null)
         {

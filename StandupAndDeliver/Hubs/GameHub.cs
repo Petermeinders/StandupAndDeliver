@@ -230,19 +230,41 @@ public class GameHub(GameRoomService gameRoomService, GameTimerService gameTimer
 
                 var activeSpeaker = room.Phase == GamePhase.SpeakerTurn
                     ? room.Players[room.CurrentSpeakerIndex] : null;
-                await Clients.Group(room.RoomCode)
-                    .ReceiveGameState(BuildStateDto(room, activeSpeaker?.ConnectionId));
+
+                // When a non-speaker disconnects during SpeakerTurn, we must not send a state
+                // update that omits the card text — that would wipe the prompt off the speaker's
+                // screen. Split the broadcast exactly as StartTurnAsync / FlipCardAsync do.
+                if (room.Phase == GamePhase.SpeakerTurn
+                    && activeSpeaker is not null
+                    && activeSpeaker.IsConnected)
+                {
+                    var cardText = await gameTimerService.GetActiveCardTextAsync(room.RoomCode);
+                    await Clients.GroupExcept(room.RoomCode, activeSpeaker.ConnectionId)
+                        .ReceiveGameState(BuildStateDto(room, activeSpeaker.ConnectionId));
+                    await Clients.Client(activeSpeaker.ConnectionId)
+                        .ReceiveGameState(BuildStateDto(room, activeSpeaker.ConnectionId, cardText));
+                }
+                else
+                {
+                    await Clients.Group(room.RoomCode)
+                        .ReceiveGameState(BuildStateDto(room, activeSpeaker?.ConnectionId));
+                }
 
                 var roomCode = room.RoomCode;
                 var playerName = player.Name;
                 var wasActiveSpeaker = activeSpeaker?.Name == playerName;
+                var wasHost = player.IsHost;
 
                 gameRoomService.StartGracePeriod(roomCode, playerName, async () =>
                 {
                     var r = gameRoomService.GetRoom(roomCode);
                     if (r is null) return;
+                    // Active speaker gone during their turn → skip to voting
                     if (wasActiveSpeaker && r.Phase == GamePhase.SpeakerTurn)
                         await gameTimerService.EndTurnAsync(r);
+                    // Host gone while others wait on Results → auto-advance so game doesn't stall
+                    else if (wasHost && r.Phase == GamePhase.Results)
+                        await gameTimerService.AdvanceToNextTurnAsync(r);
                 });
 
                 break;

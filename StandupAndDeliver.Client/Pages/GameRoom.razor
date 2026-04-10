@@ -3,6 +3,7 @@
 @inject GameStateService GameState
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject SavedSessionService SavedSession
 @inject ThemeService Theme
 @inject SettingsService Settings
 @implements IAsyncDisposable
@@ -24,11 +25,36 @@
         <p class="text-gray-400 text-lg">Connecting…</p>
     </div>
 }
+else if (_hubClosed)
+{
+    <div class="min-h-screen text-white flex flex-col items-center justify-center gap-4 p-6">
+        <p class="text-yellow-400 text-xl font-bold">Connection Lost</p>
+        @if (!string.IsNullOrEmpty(_closedRoomCode))
+        {
+            <p class="text-gray-400 text-sm">
+                Room: <span class="font-mono text-white text-lg">@_closedRoomCode</span>
+                &nbsp;·&nbsp; @_closedPlayerName
+            </p>
+        }
+        @if (!string.IsNullOrEmpty(_rejoinError))
+        {
+            <p class="text-red-400 text-sm text-center">@_rejoinError</p>
+        }
+        <button @onclick="TryRejoinAsync" disabled="@_rejoining"
+                class="px-8 py-3 bg-yellow-400 text-black rounded-xl font-bold hover:bg-yellow-300 transition-all">
+            @(_rejoining ? "Reconnecting…" : "Try Reconnect")
+        </button>
+        <button @onclick="GoHomeAsync"
+                class="px-8 py-3 bg-gray-700 text-gray-300 rounded-xl font-semibold hover:bg-gray-600 transition-all">
+            Back to Home
+        </button>
+    </div>
+}
 else if (!string.IsNullOrEmpty(_fatalError))
 {
     <div class="min-h-screen text-white flex flex-col items-center justify-center gap-4">
         <p class="text-red-400 text-lg">@_fatalError</p>
-        <button @onclick="GoHome" class="px-6 py-3 bg-yellow-400 text-black rounded-xl font-bold hover:bg-yellow-300">
+        <button @onclick="GoHomeAsync" class="px-6 py-3 bg-yellow-400 text-black rounded-xl font-bold hover:bg-yellow-300">
             Back to Home
         </button>
     </div>
@@ -94,6 +120,11 @@ else
     private VisibilityInterop? _visibilityInterop;
     private bool _connecting = true;
     private bool _reconnecting;
+    private bool _hubClosed;
+    private bool _rejoining;
+    private string? _closedRoomCode;
+    private string? _closedPlayerName;
+    private string? _rejoinError;
     private string? _fatalError;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -132,16 +163,26 @@ else
             return InvokeAsync(StateHasChanged);
         };
 
+        // All automatic retries exhausted — show an explicit reconnect UI so the player
+        // doesn't get silently stuck on a stale screen.
         _hub.Closed += _ =>
         {
             _reconnecting = false;
+            _hubClosed = true;
+            _closedRoomCode = GameState.State?.RoomCode;
+            _closedPlayerName = GameState.PlayerName;
             return InvokeAsync(StateHasChanged);
         };
 
-        _hub.On<GameStateDto>("ReceiveGameState", state =>
+        _hub.On<GameStateDto>("ReceiveGameState", async state =>
         {
             GameState.Update(state);
-            InvokeAsync(StateHasChanged);
+            // Persist session so it can be restored from the home screen after a full page reload.
+            if (state.Phase == GamePhase.GameOver)
+                await SavedSession.ClearAsync();
+            else if (state.RoomCode is not null && GameState.PlayerName is not null)
+                await SavedSession.SaveAsync(state.RoomCode, GameState.PlayerName);
+            await InvokeAsync(StateHasChanged);
         });
 
         _hub.On<int>("ReceiveTimerTick", seconds =>
@@ -177,6 +218,8 @@ else
                 result = await _hub.InvokeAsync<HubResult>("CreateRoom", GameState.PlayerName);
             else if (Action == "join" && !string.IsNullOrEmpty(Code))
                 result = await _hub.InvokeAsync<HubResult>("JoinRoom", Code, GameState.PlayerName);
+            else if (Action == "rejoin" && !string.IsNullOrEmpty(Code))
+                result = await _hub.InvokeAsync<HubResult>("RejoinRoom", Code, GameState.PlayerName);
             else
             {
                 _fatalError = "Invalid room action.";
@@ -188,6 +231,7 @@ else
             if (!result.Success)
             {
                 _fatalError = result.Error ?? "Failed to enter room.";
+                await SavedSession.ClearAsync();
                 _connecting = false;
                 await InvokeAsync(StateHasChanged);
                 return;
@@ -196,6 +240,8 @@ else
         catch (Exception ex)
         {
             _fatalError = $"Connection failed: {ex.Message}";
+            if (Action == "rejoin")
+                await SavedSession.ClearAsync();
             _connecting = false;
             await InvokeAsync(StateHasChanged);
             return;
@@ -243,8 +289,39 @@ else
             await _hub.SendAsync("SendTranscript", text);
     }
 
-    private void GoHome()
+    private async Task TryRejoinAsync()
     {
+        if (_closedRoomCode is null || _closedPlayerName is null) return;
+        _rejoining = true;
+        _rejoinError = null;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            if (_hub!.State == HubConnectionState.Disconnected)
+                await _hub.StartAsync();
+            var result = await _hub.InvokeAsync<HubResult>("RejoinRoom", _closedRoomCode, _closedPlayerName);
+            if (result.Success)
+            {
+                _hubClosed = false;
+            }
+            else
+            {
+                _rejoinError = result.Error ?? "Failed to rejoin.";
+                await SavedSession.ClearAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _rejoinError = $"Reconnect failed: {ex.Message}";
+            await SavedSession.ClearAsync();
+        }
+        _rejoining = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task GoHomeAsync()
+    {
+        await SavedSession.ClearAsync();
         GameState.Clear();
         Nav.NavigateTo("/");
     }
