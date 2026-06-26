@@ -136,5 +136,11 @@ window.gameInterop = {
             document.removeEventListener('visibilitychange', this._visibilityHandler);
             this._visibilityHandler = null;
         }
+    },
+
+    peekScroll: function (elementId) {
+        var el = document.getElementById(elementId);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 };

@@ -44,10 +44,11 @@
     <div class="relative w-[100vw] left-1/2 -translate-x-1/2 max-w-none mb-2">
         <GamePickerCarousel Games="_gameOptions"
                             @bind-SelectedGameId="_selectedGame"
-                            @bind-FocusedGameId="_focusedGameId" />
+                            FocusedGameId="_focusedGameId"
+                            FocusedGameIdChanged="OnFocusedGameChanged" />
     </div>
 
-    <div class="w-full max-w-lg">
+    <div id="game-content" class="w-full max-w-lg">
 
         @if (_focusedGame?.SinglePlayer == true && !string.IsNullOrEmpty(_focusedGame.ExternalUrl))
         {
@@ -283,6 +284,12 @@
         _joinError = null;
         GameState.PlayerName = _joinName.Trim();
         Nav.NavigateTo($"/room?action=join&code={_joinCode.ToUpperInvariant()}");
+    }
+
+    private async Task OnFocusedGameChanged(string id)
+    {
+        _focusedGameId = id;
+        await JS.InvokeVoidAsync("gameInterop.peekScroll", "game-content");
     }
 
     private async Task OnCreateKeyDown(KeyboardEventArgs e)
