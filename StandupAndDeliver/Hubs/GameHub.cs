@@ -10,6 +10,7 @@ namespace StandupAndDeliver.Hubs;
 public class GameHub(
     GameRoomService gameRoomService,
     GameTimerService gameTimerService,
+    EventLogService eventLog,
     IEnumerable<ICardGame> cardGames) : Hub<IGameClient>
 {
     private ICardGame GetGame(string gameType) =>
@@ -27,6 +28,7 @@ public class GameHub(
         var (room, code) = gameRoomService.CreateRoom(safeName, Context.ConnectionId, gameType);
         await Groups.AddToGroupAsync(Context.ConnectionId, code);
         await Clients.Caller.ReceiveGameState(BuildStateDto(room));
+        _ = eventLog.LogAsync("RoomCreated", gameType, code, safeName, 1);
         return new HubResult(true);
     }
 
@@ -41,6 +43,7 @@ public class GameHub(
 
         await Groups.AddToGroupAsync(Context.ConnectionId, room!.RoomCode);
         await Clients.Group(room.RoomCode).ReceiveGameState(BuildStateDto(room));
+        _ = eventLog.LogAsync("PlayerJoined", room.GameType, room.RoomCode, safeName, room.Players.Count);
         return new HubResult(true);
     }
 
@@ -99,6 +102,7 @@ public class GameHub(
 
         var game = GetGame(updatedRoom!.GameType);
         await game.StartGame(updatedRoom, Context.ConnectionId);
+        _ = eventLog.LogAsync("GameStarted", updatedRoom.GameType, updatedRoom.RoomCode, "", updatedRoom.Players.Count(p => p.IsConnected));
         return new HubResult(true);
     }
 

@@ -1,0 +1,56 @@
+@if (GameId == "standup")
+{
+    <GameReferenceAccordions HowToPlayDefaultOpen="false" ExampleDefaultOpen="false" />
+}
+else if (GameId == "OneO")
+{
+    <div class="bg-gray-900 rounded-2xl mb-3 overflow-hidden">
+        <button @onclick="() => _open = !_open"
+                class="w-full flex items-center justify-between px-6 py-4 text-left">
+            <span class="font-semibold text-yellow-400">How to play</span>
+            <span class="text-gray-500 text-lg transition-transform @(_open ? "rotate-180" : "")">▾</span>
+        </button>
+        @if (_open)
+        {
+            <div class="px-6 pb-5 text-sm text-gray-400 space-y-3 border-t border-gray-800 pt-4">
+                <p>Each player starts with <span class="text-gray-300 font-semibold">7 cards</span>. Match the top card of the discard pile by <span class="text-gray-300 font-semibold">color or number</span> to play a card from your hand.</p>
+                <p>If you can't play, <span class="text-gray-300 font-semibold">draw one card</span>. If the drawn card is playable, you may play it immediately — otherwise your turn passes.</p>
+                <div class="space-y-1 text-xs">
+                    <p class="text-gray-500 font-semibold uppercase tracking-wider mb-2">Special cards</p>
+                    <p><span class="text-white font-semibold">Skip</span> — the next player loses their turn.</p>
+                    <p><span class="text-white font-semibold">Reverse</span> — flips the direction of play.</p>
+                    <p><span class="text-white font-semibold">Draw Two</span> — next player draws 2 cards and is skipped.</p>
+                    <p><span class="text-white font-semibold">Wild</span> — play on anything; you choose the next color.</p>
+                    <p><span class="text-white font-semibold">Wild Draw Four</span> — next player draws 4 and is skipped; you choose the color.</p>
+                </div>
+                <p class="text-gray-500 text-xs">First player to empty their hand wins.</p>
+            </div>
+        }
+    </div>
+}
+else if (GameId == "crypt-sweepers")
+{
+    <div class="bg-gray-900 rounded-2xl mb-3 overflow-hidden">
+        <button @onclick="() => _open = !_open"
+                class="w-full flex items-center justify-between px-6 py-4 text-left">
+            <span class="font-semibold text-yellow-400">How to play</span>
+            <span class="text-gray-500 text-lg transition-transform @(_open ? "rotate-180" : "")">▾</span>
+        </button>
+        @if (_open)
+        {
+            <div class="px-6 pb-5 text-sm text-gray-400 space-y-3 border-t border-gray-800 pt-4">
+                <p>A single-player dungeon crawler built on Minesweeper logic. Every tile you reveal is either <span class="text-gray-300 font-semibold">treasure or a trap</span> — use the numbers around you to figure out which is which before you step.</p>
+                <p>Reveal all safe tiles to clear the crypt. Hit a trap and it's over.</p>
+                <p class="text-gray-500 text-xs">Opens in a new tab at crypt-sweepers.com</p>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public string GameId { get; set; } = "";
+
+    private bool _open;
+
+    protected override void OnParametersSet() => _open = false;
+}

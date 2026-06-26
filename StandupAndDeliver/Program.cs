@@ -28,6 +28,7 @@ builder.Services.AddHealthChecks();
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=standup.db";
 builder.Services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite(connectionString), ServiceLifetime.Singleton);
 builder.Services.AddSingleton<PromptCardService>();
+builder.Services.AddSingleton<EventLogService>();
 builder.Services.AddSingleton<GameRoomService>();
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<GameTimerService>();

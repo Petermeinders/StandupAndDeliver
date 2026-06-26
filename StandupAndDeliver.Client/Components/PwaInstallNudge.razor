@@ -1,0 +1,19 @@
+@inject IJSRuntime JS
+
+<div id="pwa-install-nudge" class="pwa-install-nudge pwa-hidden">
+    <p class="pwa-install-label">Play without the browser</p>
+    <button type="button" id="pwa-install-btn" class="pwa-install-btn">
+        📲 Add to Home Screen
+    </button>
+    <p id="pwa-ios-tip" class="pwa-ios-tip pwa-hidden">
+        Tap <strong>Share</strong> (<span style="font-size:1.1em">⎋</span>) then <strong>Add to Home Screen</strong>
+    </p>
+</div>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await JS.InvokeVoidAsync("gameInterop.wireInstallNudge");
+    }
+}

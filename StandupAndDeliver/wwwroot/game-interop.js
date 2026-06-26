@@ -142,5 +142,43 @@ window.gameInterop = {
         var el = document.getElementById(elementId);
         if (!el) return;
         el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+
+    _deferredInstallPrompt: null,
+
+    wireInstallNudge: function () {
+        // Already running as a standalone PWA — hide entirely
+        if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
+
+        var nudge      = document.getElementById('pwa-install-nudge');
+        var btn        = document.getElementById('pwa-install-btn');
+        var iosTip     = document.getElementById('pwa-ios-tip');
+
+        if (!nudge || !btn) return;
+
+        var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+
+        if (isIOS) {
+            nudge.classList.remove('pwa-hidden');
+            btn.addEventListener('click', function () {
+                if (iosTip) iosTip.classList.toggle('pwa-hidden');
+            });
+            return;
+        }
+
+        // Android / Chrome / Edge / Windows — wait for the browser prompt
+        window.addEventListener('beforeinstallprompt', function (e) {
+            e.preventDefault();
+            gameInterop._deferredInstallPrompt = e;
+            nudge.classList.remove('pwa-hidden');
+        });
+
+        btn.addEventListener('click', async function () {
+            if (!gameInterop._deferredInstallPrompt) return;
+            gameInterop._deferredInstallPrompt.prompt();
+            await gameInterop._deferredInstallPrompt.userChoice;
+            gameInterop._deferredInstallPrompt = null;
+            nudge.classList.add('pwa-hidden');
+        });
     }
 };

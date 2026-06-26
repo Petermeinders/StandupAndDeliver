@@ -559,3 +559,55 @@ body.theme-w95 .overflow-hidden {
     opacity: 0.35;
     cursor: not-allowed;
 }
+
+/* ── PWA Install Nudge ──────────────────────────────────────────────────── */
+.pwa-hidden { display: none !important; }
+
+.pwa-install-nudge {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.625rem;
+    margin-top: 1rem;
+    padding: 1rem;
+    background: linear-gradient(165deg, rgba(30, 60, 100, 0.35) 0%, rgba(10, 18, 40, 0.88) 100%);
+    border: 1px solid rgba(100, 160, 255, 0.3);
+    border-radius: 1rem;
+    box-shadow: 0 4px 24px rgba(20, 80, 180, 0.18), 0 8px 28px rgba(0, 0, 0, 0.4);
+}
+
+.pwa-install-label {
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    text-align: center;
+    color: rgba(180, 210, 255, 0.9);
+    margin: 0;
+}
+
+.pwa-install-btn {
+    width: 100%;
+    padding: 0.85rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(120, 190, 255, 0.4);
+    background: linear-gradient(180deg, #2a6a9e 0%, #1a4a78 100%);
+    color: #f0f8ff;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 4px 14px rgba(20, 80, 140, 0.4);
+    transition: filter 0.15s ease, transform 0.1s ease;
+}
+
+.pwa-install-btn:hover  { filter: brightness(1.1); }
+.pwa-install-btn:active { transform: scale(0.98); filter: brightness(0.95); }
+
+.pwa-ios-tip {
+    font-size: 0.8rem;
+    color: rgba(210, 225, 245, 0.9);
+    line-height: 1.5;
+    text-align: center;
+    margin: 0;
+}

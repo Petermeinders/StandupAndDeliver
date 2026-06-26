@@ -65,13 +65,13 @@
             </div>
         }
 
+        @if (_focusedGame is { ComingSoon: false })
+        {
+            <GameHowToPlay GameId="@_focusedGameId" />
+        }
+
         @if (ShowPartyLobby && !string.IsNullOrEmpty(_selectedGame))
         {
-            @if (_selectedGame == "standup")
-            {
-                <GameReferenceAccordions HowToPlayDefaultOpen="false" ExampleDefaultOpen="false" />
-            }
-
             <div class="bg-gray-900 rounded-2xl p-6 mb-4">
                 <div class="flex items-baseline justify-between mb-4">
                     <h2 class="text-lg font-semibold text-gray-300">Create a Room</h2>
@@ -176,6 +176,8 @@
                 </div>
             }
         </div>
+
+        <PwaInstallNudge />
 
     </div>
 </div>

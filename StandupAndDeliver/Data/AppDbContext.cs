@@ -7,4 +7,5 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<PromptCard> PromptCards => Set<PromptCard>();
     public DbSet<FeedbackEntry> Feedback => Set<FeedbackEntry>();
+    public DbSet<GameEventLog> GameEvents => Set<GameEventLog>();
 }
