@@ -381,6 +381,73 @@ body.theme-w95 .overflow-hidden {
         0 0 32px rgba(251, 191, 36, 0.25);
 }
 
+.game-carousel-card.is-deck-card.is-active .game-carousel-card-inner {
+    box-shadow:
+        0 28px 56px rgba(0, 0, 0, 0.55),
+        0 0 0 3px #34d399,
+        0 0 32px rgba(52, 211, 153, 0.22);
+}
+
+.game-carousel-separator {
+    flex: 0 0 auto;
+    width: 3.25rem;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    pointer-events: none;
+}
+
+.game-carousel-separator-line {
+    position: absolute;
+    inset: 12% 50% 12% auto;
+    width: 2px;
+    transform: translateX(-50%);
+    background: linear-gradient(
+        to bottom,
+        transparent 0%,
+        rgba(255, 255, 255, 0.15) 12%,
+        rgba(52, 211, 153, 0.55) 50%,
+        rgba(255, 255, 255, 0.15) 88%,
+        transparent 100%
+    );
+    border-radius: 9999px;
+}
+
+.game-carousel-separator-label {
+    position: relative;
+    z-index: 1;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(167, 243, 208, 0.85);
+    background: rgba(15, 23, 42, 0.72);
+    padding: 0.65rem 0.35rem;
+    border-radius: 9999px;
+    border: 1px solid rgba(52, 211, 153, 0.25);
+    white-space: nowrap;
+}
+
+.game-carousel-dot-separator {
+    width: 1px;
+    height: 1rem;
+    background: rgba(52, 211, 153, 0.35);
+    margin: 0 0.15rem;
+}
+
+.game-carousel-dot.is-deck-dot.is-active {
+    background: #34d399;
+}
+
+.game-carousel-fallback--crypt-sweepers {
+    background: linear-gradient(160deg, #312e81 0%, #1e1b4b 40%, #14532d 100%);
+}
+
 .game-carousel-image,
 .game-carousel-fallback {
     position: absolute;

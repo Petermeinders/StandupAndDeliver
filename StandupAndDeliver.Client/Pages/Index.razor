@@ -43,12 +43,28 @@
 
     <div class="relative w-[100vw] left-1/2 -translate-x-1/2 max-w-none mb-2">
         <GamePickerCarousel Games="_gameOptions"
-                            @bind-SelectedGameId="_selectedGame" />
+                            @bind-SelectedGameId="_selectedGame"
+                            @bind-FocusedGameId="_focusedGameId" />
     </div>
 
     <div class="w-full max-w-lg">
 
-        @if (!string.IsNullOrEmpty(_selectedGame))
+        @if (_focusedGame?.SinglePlayer == true && !string.IsNullOrEmpty(_focusedGame.ExternalUrl))
+        {
+            <div class="bg-gray-900 rounded-2xl p-6 mb-4 border border-emerald-500/20">
+                <p class="text-xs text-emerald-400 font-semibold uppercase tracking-widest mb-1">Single player · External game</p>
+                <h2 class="text-lg font-semibold text-gray-200 mb-1">@_focusedGame.Name</h2>
+                <p class="text-sm text-gray-400 mb-4">@_focusedGame.Tagline</p>
+                <a href="@_focusedGame.ExternalUrl"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   class="block w-full py-3 rounded-xl font-bold text-center bg-emerald-500 text-black hover:bg-emerald-400 transition-all">
+                    Play @_focusedGame.Name ↗
+                </a>
+            </div>
+        }
+
+        @if (ShowPartyLobby && !string.IsNullOrEmpty(_selectedGame))
         {
             @if (_selectedGame == "standup")
             {
@@ -170,11 +186,24 @@
     private readonly List<GamePickerCarousel.GameOption> _gameOptions =
     [
         new("standup", "🎤", "Standup & Deliver", "Corporate chaos", "/StandupAndDeliverBanner.jpg"),
-        new("OneO", "🃏", "OneO", "Classic card game"),
+        new("OneO", "🃏", "OneO", "Classic card game", "/OneOCover.png"),
         new("coming", "✨", "More Soon", "Stay tuned", ComingSoon: true),
+        new("crypt-sweepers", "💀", "Crypt Sweepers", "Every tile a treasure. Every step a death sentence.",
+            "/CryptSweepersCover.png",
+            SinglePlayer: true,
+            ExternalUrl: "https://crypt-sweepers.com",
+            SeparatorBefore: true,
+            SeparatorLabel: "Single Player"),
     ];
 
     private string _selectedGame = "standup";
+    private string _focusedGameId = "standup";
+
+    private GamePickerCarousel.GameOption? _focusedGame =>
+        _gameOptions.FirstOrDefault(g => g.Id == _focusedGameId);
+
+    private bool ShowPartyLobby =>
+        _focusedGame is { SinglePlayer: false, ComingSoon: false };
     private bool _feedbackOpen = false;
     private string _feedbackText = "";
     private bool _feedbackSubmitting;

@@ -18,9 +18,20 @@
                 var isActive = index == _focusedIndex;
                 var distance = Math.Abs(index - _focusedIndex);
 
+                if (game.SeparatorBefore)
+                {
+                    <div class="game-carousel-separator" aria-hidden="true">
+                        <div class="game-carousel-separator-line"></div>
+                        @if (!string.IsNullOrEmpty(game.SeparatorLabel))
+                        {
+                            <span class="game-carousel-separator-label">@game.SeparatorLabel</span>
+                        }
+                    </div>
+                }
+
                 <button type="button"
                         @onclick="() => OnCardClick(index)"
-                        class="game-carousel-card @(isActive ? "is-active" : "") @(game.ComingSoon ? "is-disabled" : "")"
+                        class="game-carousel-card @(isActive ? "is-active" : "") @(game.ComingSoon ? "is-disabled" : "") @(game.SinglePlayer ? "is-deck-card" : "")"
                         style="--distance: @distance"
                         aria-label="@game.Name"
                         aria-current="@(isActive ? "true" : null)">
@@ -37,12 +48,19 @@
                         }
                         <div class="game-carousel-overlay"></div>
                         <div class="game-carousel-caption">
-                            <div class="text-4xl mb-2 drop-shadow-lg">@game.Icon</div>
+                            @if (string.IsNullOrEmpty(game.ImageUrl))
+                            {
+                                <div class="text-4xl mb-2 drop-shadow-lg">@game.Icon</div>
+                            }
                             <div class="text-lg font-bold text-white leading-tight">@game.Name</div>
                             <div class="text-sm text-gray-300 mt-1">@game.Tagline</div>
                             @if (game.ComingSoon)
                             {
                                 <div class="text-xs text-gray-400 mt-3 font-semibold uppercase tracking-wider">Coming soon</div>
+                            }
+                            else if (game.SinglePlayer)
+                            {
+                                <div class="text-xs text-emerald-300 mt-3 font-semibold uppercase tracking-wider">Deck card · External</div>
                             }
                             else if (game.Id == SelectedGameId)
                             {
@@ -67,9 +85,13 @@
             @for (var i = 0; i < Games.Count; i++)
             {
                 var index = i;
+                if (Games[index].SeparatorBefore)
+                {
+                    <span class="game-carousel-dot-separator" aria-hidden="true"></span>
+                }
                 <button type="button"
                         role="tab"
-                        class="game-carousel-dot @(index == _focusedIndex ? "is-active" : "")"
+                        class="game-carousel-dot @(index == _focusedIndex ? "is-active" : "") @(Games[index].SinglePlayer ? "is-deck-dot" : "")"
                         aria-selected="@(index == _focusedIndex)"
                         aria-label="@Games[index].Name"
                         @onclick="() => OnCardClick(index)">
@@ -87,14 +109,27 @@
 </div>
 
 @code {
-    public record GameOption(string Id, string Icon, string Name, string Tagline, string? ImageUrl = null, bool ComingSoon = false);
+    public record GameOption(
+        string Id,
+        string Icon,
+        string Name,
+        string Tagline,
+        string? ImageUrl = null,
+        bool ComingSoon = false,
+        bool SinglePlayer = false,
+        string? ExternalUrl = null,
+        bool SeparatorBefore = false,
+        string? SeparatorLabel = null);
 
     [Parameter, EditorRequired] public IReadOnlyList<GameOption> Games { get; set; } = [];
     [Parameter] public string SelectedGameId { get; set; } = "";
     [Parameter] public EventCallback<string> SelectedGameIdChanged { get; set; }
+    [Parameter] public string FocusedGameId { get; set; } = "";
+    [Parameter] public EventCallback<string> FocusedGameIdChanged { get; set; }
 
     private const double CardWidth = 280;
     private const double CardGap = 24;
+    private const double SeparatorWidth = 52;
 
     private double _dragOffset;
     private bool _dragging;
@@ -105,23 +140,55 @@
 
     protected override void OnParametersSet()
     {
+        if (!string.IsNullOrEmpty(FocusedGameId))
+        {
+            var focused = Games.ToList().FindIndex(g => g.Id == FocusedGameId);
+            if (focused >= 0)
+                _focusedIndex = focused;
+            return;
+        }
+
         var selected = Games.ToList().FindIndex(g => g.Id == SelectedGameId);
         if (selected >= 0)
             _focusedIndex = selected;
     }
 
-    private double TrackOffsetPx => -_focusedIndex * (CardWidth + CardGap) + _dragOffset;
+    private double TrackOffsetPx => -OffsetForIndex(_focusedIndex) + _dragOffset;
+
+    private double OffsetForIndex(int index)
+    {
+        var offset = 0d;
+        for (var i = 0; i < index; i++)
+        {
+            offset += CardWidth + CardGap;
+            if (Games[i + 1].SeparatorBefore)
+                offset += SeparatorWidth + CardGap;
+        }
+
+        return offset;
+    }
 
     private async Task OnCardClick(int index)
     {
         if (index < 0 || index >= Games.Count) return;
-        _focusedIndex = index;
+        await SetFocus(index);
 
         var game = Games[index];
-        if (!game.ComingSoon && game.Id != SelectedGameId)
+        if (!game.ComingSoon && !game.SinglePlayer && game.Id != SelectedGameId)
         {
             SelectedGameId = game.Id;
             await SelectedGameIdChanged.InvokeAsync(game.Id);
+        }
+    }
+
+    private async Task SetFocus(int index)
+    {
+        _focusedIndex = index;
+        var id = Games[index].Id;
+        if (FocusedGameId != id)
+        {
+            FocusedGameId = id;
+            await FocusedGameIdChanged.InvokeAsync(id);
         }
     }
 
