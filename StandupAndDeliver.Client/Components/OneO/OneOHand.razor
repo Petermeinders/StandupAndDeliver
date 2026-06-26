@@ -1,0 +1,138 @@
+﻿@inject GameStateService GameState
+
+<div class="bg-gray-900 rounded-2xl p-4">
+    <p class="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-3">Your Hand (@(GameState.OneOState?.MyHand.Count ?? 0) cards)</p>
+
+    @if (GameState.OneOState is null || GameState.OneOState.MyHand.Count == 0)
+    {
+        <p class="text-gray-600 text-sm text-center py-4">No cards</p>
+    }
+    else
+    {
+        <div class="flex flex-wrap gap-2">
+            @foreach (var card in GameState.OneOState.MyHand)
+            {
+                var canPlay = IsMyTurn && CanPlay(card);
+                <button @onclick="() => OnPlayCard(card)"
+                        disabled="@(!canPlay)"
+                        class="w-14 h-20 rounded-xl border-2 flex flex-col items-center justify-center gap-1 text-sm font-bold transition-all
+                               @(canPlay
+                                   ? CardBorderColor(card.Color) + " " + CardBgColor(card.Color) + " hover:scale-105 cursor-pointer shadow-lg"
+                                   : "border-gray-700 bg-gray-800 opacity-40 cursor-not-allowed")">
+                    <span class="text-xs text-white/60 leading-none">@ColorInitial(card.Color)</span>
+                    <span class="text-white text-base leading-none">@CardLabel(card)</span>
+                </button>
+            }
+        </div>
+    }
+
+    @if (_showColorPicker && _pendingWildCard is not null)
+    {
+        <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+            <div class="bg-gray-900 rounded-2xl p-6 flex flex-col items-center gap-4">
+                <p class="text-white font-semibold">Choose a color</p>
+                <div class="flex gap-4">
+                    @foreach (var color in new[] { "Red", "Green", "Blue", "Yellow" })
+                    {
+                        <button @onclick="() => OnWildColorChosen(color)"
+                                class="w-12 h-12 rounded-full hover:scale-110 transition-all @WildBtnColor(color)">
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public required Func<string, string?, Task<HubResult>> GameActionFunc { get; set; }
+
+    private OneOCardDto? _pendingWildCard;
+    private bool _showColorPicker;
+
+    private bool IsMyTurn => GameState.OneOState?.CurrentPlayerName == GameState.PlayerName;
+
+    private bool CanPlay(OneOCardDto card)
+    {
+        var state = GameState.OneOState;
+        if (state?.TopDiscard is null) return false;
+        if (card.Type is "Wild" or "WildDrawFour") return true;
+        if (card.Color == state.CurrentColor) return true;
+        var top = state.TopDiscard;
+        if (card.Type == top.Type && card.Type != "Number") return true;
+        if (card.Type == "Number" && top.Type == "Number" && card.Value == top.Value) return true;
+        return false;
+    }
+
+    private async Task OnPlayCard(OneOCardDto card)
+    {
+        if (!IsMyTurn || !CanPlay(card)) return;
+
+        if (card.Type is "Wild" or "WildDrawFour")
+        {
+            _pendingWildCard = card;
+            _showColorPicker = true;
+            return;
+        }
+
+        var payload = System.Text.Json.JsonSerializer.Serialize(new { cardId = card.Id });
+        await GameActionFunc("PlayCard", payload);
+    }
+
+    private async Task OnWildColorChosen(string color)
+    {
+        _showColorPicker = false;
+        var payload = System.Text.Json.JsonSerializer.Serialize(new { cardId = _pendingWildCard!.Id, chosenColor = color });
+        _pendingWildCard = null;
+        await GameActionFunc("PlayCard", payload);
+    }
+
+    private static string CardLabel(OneOCardDto card) => card.Type switch
+    {
+        "Skip" => "⊘",
+        "Reverse" => "⇄",
+        "DrawTwo" => "+2",
+        "Wild" => "★",
+        "WildDrawFour" => "+4",
+        _ => card.Value.ToString()
+    };
+
+    private static string ColorInitial(string color) => color switch
+    {
+        "Red" => "R",
+        "Green" => "G",
+        "Blue" => "B",
+        "Yellow" => "Y",
+        "Wild" => "W",
+        _ => ""
+    };
+
+    private static string CardBorderColor(string color) => color switch
+    {
+        "Red" => "border-red-500",
+        "Green" => "border-green-500",
+        "Blue" => "border-blue-500",
+        "Yellow" => "border-yellow-400",
+        "Wild" => "border-purple-500",
+        _ => "border-gray-500"
+    };
+
+    private static string CardBgColor(string color) => color switch
+    {
+        "Red" => "bg-red-900/50",
+        "Green" => "bg-green-900/50",
+        "Blue" => "bg-blue-900/50",
+        "Yellow" => "bg-yellow-900/50",
+        "Wild" => "bg-purple-900/50",
+        _ => "bg-gray-800"
+    };
+
+    private static string WildBtnColor(string color) => color switch
+    {
+        "Red" => "bg-red-500",
+        "Green" => "bg-green-500",
+        "Blue" => "bg-blue-500",
+        "Yellow" => "bg-yellow-400",
+        _ => "bg-gray-500"
+    };
+}

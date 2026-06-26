@@ -7,14 +7,13 @@
 @inject SettingsService Settings
 @inject IJSRuntime JS
 
-<PageTitle>Standup & Deliver</PageTitle>
+<PageTitle>Peter's Party Games</PageTitle>
 
 <SettingsModal @ref="_settingsModal" />
 
 <div class="landing-bg"></div>
-<div class="min-h-screen text-white flex flex-col items-center justify-center p-6 relative z-10">
-    <div class="w-full max-w-md">
-
+<div class="min-h-screen text-white flex flex-col items-center justify-center p-6 relative z-10 overflow-x-hidden">
+    <div class="w-full max-w-lg">
         <div class="flex justify-end mb-2">
             <button @onclick="() => _settingsModal!.Open()"
                     class="text-gray-500 hover:text-gray-300 transition-all p-2 rounded-lg"
@@ -23,35 +22,12 @@
             </button>
         </div>
 
-        <img src="StandupAndDeliverBanner.jpg" alt="Standup & Deliver" class="w-full rounded-2xl mb-6 shadow-lg" />
-
-        <h1 class="text-4xl font-bold text-center mb-2 text-yellow-400">Standup & Deliver</h1>
-        <p class="text-center text-gray-400 mb-8 text-sm">The corporate party game for people who've sat through too many standups</p>
-
-        <GameReferenceAccordions HowToPlayDefaultOpen="true" ExampleDefaultOpen="false" />
-
-        <div class="bg-gray-900 rounded-2xl mb-6 overflow-hidden">
-            <button @onclick="() => _storyOpen = !_storyOpen"
-                    class="w-full flex items-center justify-between px-6 py-4 text-left">
-                <span class="font-semibold text-gray-300">Background</span>
-                <span class="text-gray-500 text-lg transition-transform @(_storyOpen ? "rotate-180" : "")">▾</span>
-            </button>
-            @if (_storyOpen)
-            {
-                <div class="px-6 pb-5 text-sm text-gray-400 space-y-3 border-t border-gray-800 pt-4">
-                    <p>Welcome to <span class="text-gray-300 font-semibold">BusinessCorp</span> — where we are like family.</p>
-                    <p>You are employee <span class="text-gray-300 font-mono">100,987</span>. Your cubicle is <span class="text-gray-300 font-mono">C37</span>.</p>
-                    <p>Every morning you have a 15-minute <span class="text-yellow-400 font-semibold">"Standup"</span> meeting and give an update to your team about what you did the previous day.</p>
-                    <p>Even though you slacked off for 7 hours, you need to convince the team (and boss) that you were very productive. Be sure to use a lot of business lingo to make the work sound important.</p>
-                    <p>But if you are caught blatantly lying, it's going to hurt your promotion.</p>
-                    <p class="text-gray-500 italic">See you at Standup!</p>
-                </div>
-            }
-        </div>
+        <h1 class="text-4xl font-bold text-center mb-1 text-yellow-400">Peter's Party Games</h1>
+        <p class="text-center text-gray-500 mb-8 text-sm">Pick a game, grab your friends</p>
 
         @if (!string.IsNullOrEmpty(_resumeCode))
         {
-            <div class="bg-yellow-400/10 border border-yellow-400/30 rounded-2xl p-5 mb-4">
+            <div class="bg-yellow-400/10 border border-yellow-400/30 rounded-2xl p-5 mb-6">
                 <p class="text-xs text-yellow-400 font-semibold uppercase tracking-widest mb-1">Resume Last Session</p>
                 <p class="text-gray-300 text-sm mb-3">
                     Room <span class="font-mono font-bold text-white">@_resumeCode</span>
@@ -63,35 +39,51 @@
                 </button>
             </div>
         }
+    </div>
 
-        <div class="bg-gray-900 rounded-2xl p-6 mb-4">
-            <div class="flex items-baseline justify-between mb-4">
-                <h2 class="text-lg font-semibold text-gray-300">Create a Room</h2>
-                <span class="text-xs text-gray-500">Start here — you'll be the host</span>
-            </div>
-            <div class="space-y-3">
-                <input
-                    @bind="_createName"
-                    @bind:event="oninput"
-                    @onkeydown="OnCreateKeyDown"
-                    placeholder="Your name"
-                    maxlength="20"
-                    class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-yellow-400" />
-                <button
-                    @onclick="OnCreate"
-                    disabled="@(_creating || string.IsNullOrWhiteSpace(_createName))"
-                    class="w-full py-3 rounded-xl font-bold transition-all
-                           @(string.IsNullOrWhiteSpace(_createName)
-                               ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-                               : "bg-yellow-400 text-black hover:bg-yellow-300")">
-                    @(_creating ? "Creating…" : "Create Room")
-                </button>
-            </div>
-            @if (!string.IsNullOrEmpty(_createError))
+    <div class="relative w-[100vw] left-1/2 -translate-x-1/2 max-w-none mb-2">
+        <GamePickerCarousel Games="_gameOptions"
+                            @bind-SelectedGameId="_selectedGame" />
+    </div>
+
+    <div class="w-full max-w-lg">
+
+        @if (!string.IsNullOrEmpty(_selectedGame))
+        {
+            @if (_selectedGame == "standup")
             {
-                <p class="mt-3 text-red-400 text-sm">@_createError</p>
+                <GameReferenceAccordions HowToPlayDefaultOpen="false" ExampleDefaultOpen="false" />
             }
-        </div>
+
+            <div class="bg-gray-900 rounded-2xl p-6 mb-4">
+                <div class="flex items-baseline justify-between mb-4">
+                    <h2 class="text-lg font-semibold text-gray-300">Create a Room</h2>
+                    <span class="text-xs text-gray-500">You'll be the host</span>
+                </div>
+                <div class="space-y-3">
+                    <input
+                        @bind="_createName"
+                        @bind:event="oninput"
+                        @onkeydown="OnCreateKeyDown"
+                        placeholder="Your name"
+                        maxlength="20"
+                        class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-yellow-400" />
+                    <button
+                        @onclick="OnCreate"
+                        disabled="@(_creating || string.IsNullOrWhiteSpace(_createName))"
+                        class="w-full py-3 rounded-xl font-bold transition-all
+                               @(string.IsNullOrWhiteSpace(_createName)
+                                   ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                                   : "bg-yellow-400 text-black hover:bg-yellow-300")">
+                        @(_creating ? "Creating…" : "Create Room")
+                    </button>
+                </div>
+                @if (!string.IsNullOrEmpty(_createError))
+                {
+                    <p class="mt-3 text-red-400 text-sm">@_createError</p>
+                }
+            </div>
+        }
 
         <div class="bg-gray-900 rounded-2xl p-6">
             <div class="flex items-baseline justify-between mb-4">
@@ -142,7 +134,7 @@
                     <p class="text-sm text-gray-400">Please feel free to leave feedback and let me know any problems, recommendations, or features you might like.</p>
                     @if (_feedbackSubmitted)
                     {
-                        <p class="text-green-400 text-sm font-semibold">Thanks for your feedback! 🙌</p>
+                        <p class="text-green-400 text-sm font-semibold">Thanks for your feedback!</p>
                     }
                     else
                     {
@@ -175,7 +167,14 @@
     [Parameter, SupplyParameterFromQuery] public string? Error { get; set; }
     [Parameter, SupplyParameterFromQuery] public string? Join { get; set; }
 
-    private bool _storyOpen = false;
+    private readonly List<GamePickerCarousel.GameOption> _gameOptions =
+    [
+        new("standup", "🎤", "Standup & Deliver", "Corporate chaos", "/StandupAndDeliverBanner.jpg"),
+        new("OneO", "🃏", "OneO", "Classic card game"),
+        new("coming", "✨", "More Soon", "Stay tuned", ComingSoon: true),
+    ];
+
+    private string _selectedGame = "standup";
     private bool _feedbackOpen = false;
     private string _feedbackText = "";
     private bool _feedbackSubmitting;
@@ -210,7 +209,6 @@
             await Theme.InitializeAsync();
             await Settings.InitializeAsync();
 
-            // Check for a saved session the player can jump back into
             try
             {
                 var code = await JS.InvokeAsync<string?>("localStorage.getItem", "sad_room");
@@ -241,11 +239,12 @@
 
     private async Task OnCreate()
     {
-        if (string.IsNullOrWhiteSpace(_createName)) return;
+        if (string.IsNullOrWhiteSpace(_createName) || string.IsNullOrEmpty(_selectedGame)) return;
         _creating = true;
         _createError = null;
         GameState.PlayerName = _createName.Trim();
-        Nav.NavigateTo($"/room?action=create");
+        GameState.SelectedGameType = _selectedGame;
+        Nav.NavigateTo($"/room?action=create&game={_selectedGame}");
     }
 
     private async Task OnJoin()

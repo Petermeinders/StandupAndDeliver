@@ -11,5 +11,6 @@ public record GameStateDto(
     int VotesTotal,
     TurnResultDto? LastTurnResult,
     bool CardFlipped = false,
-    string? LastTranscript = null
+    string? LastTranscript = null,
+    string GameType = "standup"
 );

@@ -8,7 +8,7 @@
 @inject SettingsService Settings
 @implements IAsyncDisposable
 
-<PageTitle>Standup & Deliver</PageTitle>
+<PageTitle>Peter's Party Games</PageTitle>
 
 <div class="landing-bg"></div>
 
@@ -58,6 +58,30 @@ else if (!string.IsNullOrEmpty(_fatalError))
             Back to Home
         </button>
     </div>
+}
+else if (GameState.State?.GameType == "OneO")
+{
+    @switch (GameState.State?.Phase)
+    {
+        case GamePhase.Lobby:
+            <div @key="GamePhase.Lobby" class="screen-fade">
+                <LobbyView OnStart="StateHasChanged" StartGameFunc="StartGame" />
+            </div>
+            break;
+
+        case GamePhase.Playing:
+        case GamePhase.GameOver:
+            <div @key="@GameState.State.Phase" class="screen-fade">
+                <OneOGameRoot GameActionFunc="GameAction" />
+            </div>
+            break;
+
+        default:
+            <div class="min-h-screen text-white flex items-center justify-center">
+                <p class="text-gray-400">Loading…</p>
+            </div>
+            break;
+    }
 }
 else
 {
@@ -115,6 +139,7 @@ else
 @code {
     [Parameter, SupplyParameterFromQuery] public string? Action { get; set; }
     [Parameter, SupplyParameterFromQuery] public string? Code { get; set; }
+    [Parameter, SupplyParameterFromQuery] public string? Game { get; set; }
 
     private HubConnection? _hub;
     private VisibilityInterop? _visibilityInterop;
@@ -209,13 +234,21 @@ else
             InvokeAsync(StateHasChanged);
         });
 
+        _hub.On<OneOGameStateDto>("ReceiveOneOGameState", state =>
+        {
+            GameState.UpdateOneO(state);
+            InvokeAsync(StateHasChanged);
+        });
+
         try
         {
             await _hub.StartAsync();
 
+            var gameType = Game ?? GameState.SelectedGameType ?? "standup";
+
             HubResult result;
             if (Action == "create")
-                result = await _hub.InvokeAsync<HubResult>("CreateRoom", GameState.PlayerName);
+                result = await _hub.InvokeAsync<HubResult>("CreateRoom", GameState.PlayerName, gameType);
             else if (Action == "join" && !string.IsNullOrEmpty(Code))
                 result = await _hub.InvokeAsync<HubResult>("JoinRoom", Code, GameState.PlayerName);
             else if (Action == "rejoin" && !string.IsNullOrEmpty(Code))
@@ -256,38 +289,24 @@ else
     private async Task<HubResult> StartGame() =>
         _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("StartGame");
 
-    private async Task<HubResult> FlipCard() =>
-        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("FlipCard");
+    private async Task<HubResult> GameAction(string action, string? payload = null) =>
+        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("GameAction", action, payload);
 
-    private async Task<HubResult> EndTurn() =>
-        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("EndTurn");
-
-    private async Task<HubResult> PauseTurn() =>
-        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("PauseTurn");
-
-    private async Task<HubResult> ResumeTurn() =>
-        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("ResumeTurn");
-
-    private async Task<HubResult> SkipTurn() =>
-        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("SkipTurn");
+    private async Task<HubResult> FlipCard() => await GameAction("FlipCard");
+    private async Task<HubResult> EndTurn() => await GameAction("EndTurn");
+    private async Task<HubResult> PauseTurn() => await GameAction("PauseTurn");
+    private async Task<HubResult> ResumeTurn() => await GameAction("ResumeTurn");
+    private async Task<HubResult> SkipTurn() => await GameAction("SkipTurn");
+    private async Task<HubResult> AdvanceTurn() => await GameAction("AdvanceTurn");
 
     private async Task<HubResult> SubmitImpressiveness(int rating) =>
-        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("SubmitImpressiveness", rating);
+        await GameAction("SubmitImpressiveness", $"{{\"rating\":{rating}}}");
 
-    private async Task<HubResult> AdvanceTurn() =>
-        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("AdvanceTurn");
+    private async Task SendReaction(string emoji) =>
+        await GameAction("SendReaction", $"{{\"emoji\":\"{emoji}\"}}");
 
-    private async Task SendReaction(string emoji)
-    {
-        if (_hub is not null)
-            await _hub.SendAsync("SendReaction", emoji);
-    }
-
-    private async Task SendTranscript(string text)
-    {
-        if (_hub is not null)
-            await _hub.SendAsync("SendTranscript", text);
-    }
+    private async Task SendTranscript(string text) =>
+        await GameAction("SendTranscript", System.Text.Json.JsonSerializer.Serialize(new { text }));
 
     private async Task TryRejoinAsync()
     {

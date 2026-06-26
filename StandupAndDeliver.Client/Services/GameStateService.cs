@@ -7,7 +7,9 @@ public record ReactionItem(string PlayerName, string Emoji, DateTime ReceivedAt)
 public class GameStateService
 {
     public GameStateDto? State { get; private set; }
+    public OneOGameStateDto? OneOState { get; private set; }
     public string? PlayerName { get; set; }
+    public string SelectedGameType { get; set; } = "standup";
     public int SecondsRemaining { get; private set; }
 
     private readonly List<ReactionItem> _reactions = [];
@@ -69,9 +71,12 @@ public class GameStateService
         return _reactions.AsReadOnly();
     }
 
+    public void UpdateOneO(OneOGameStateDto state) => OneOState = state;
+
     public void Clear()
     {
         State = null;
+        OneOState = null;
         PlayerName = null;
         SecondsRemaining = 0;
         CurrentTranscript = "";

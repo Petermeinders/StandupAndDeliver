@@ -15,4 +15,5 @@ public class GameRoom
     public int? ActiveCardId { get; set; }
     public bool CardFlipped { get; set; }
     public string CurrentTranscript { get; set; } = "";
+    public string GameType { get; set; } = "standup"; // "standup" | "OneO"
 }

@@ -1,0 +1,90 @@
+﻿@inject GameStateService GameState
+
+<div class="bg-gray-900 rounded-2xl p-6 flex flex-col items-center gap-4">
+
+    <div class="flex items-center gap-8">
+        <div class="flex flex-col items-center gap-2">
+            <button @onclick="OnDrawCard"
+                    disabled="@(!IsMyTurn)"
+                    class="w-16 h-24 rounded-xl border-2 flex items-center justify-center text-2xl font-bold transition-all
+                           @(IsMyTurn ? "border-blue-400 bg-blue-400/10 hover:bg-blue-400/20 cursor-pointer" : "border-gray-700 bg-gray-800 cursor-not-allowed opacity-60")">
+                🂠
+            </button>
+            <span class="text-xs text-gray-500">@(GameState.OneOState?.DrawPileCount ?? 0) left</span>
+        </div>
+
+        <div class="flex flex-col items-center gap-2">
+            @if (GameState.OneOState?.TopDiscard is { } top)
+            {
+                <div class="w-16 h-24 rounded-xl border-2 flex flex-col items-center justify-center gap-1
+                            @CardBorderColor(GameState.OneOState.CurrentColor) @CardBgColor(GameState.OneOState.CurrentColor)">
+                    <span class="text-xs text-white/70">@top.Color</span>
+                    <span class="text-2xl font-bold text-white">@CardLabel(top)</span>
+                </div>
+            }
+            <span class="text-xs text-gray-500">
+                Current: <span class="font-bold @ColorTextClass(GameState.OneOState?.CurrentColor ?? "")">@(GameState.OneOState?.CurrentColor ?? "")</span>
+            </span>
+        </div>
+    </div>
+
+    <div class="text-center">
+        @if (IsMyTurn)
+        {
+            <p class="text-yellow-400 font-bold">Your turn!</p>
+        }
+        else
+        {
+            <p class="text-gray-400">Waiting for <span class="text-white font-semibold">@(GameState.OneOState?.CurrentPlayerName)</span>…</p>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public required Func<string, string?, Task<HubResult>> GameActionFunc { get; set; }
+
+    private bool IsMyTurn => GameState.OneOState?.CurrentPlayerName == GameState.PlayerName;
+
+    private async Task OnDrawCard()
+    {
+        if (!IsMyTurn) return;
+        await GameActionFunc("DrawCard", null);
+    }
+
+    private static string CardLabel(OneOCardDto card) => card.Type switch
+    {
+        "Skip" => "⊘",
+        "Reverse" => "⇄",
+        "DrawTwo" => "+2",
+        "Wild" => "★",
+        "WildDrawFour" => "+4",
+        _ => card.Value.ToString()
+    };
+
+    private static string CardBorderColor(string color) => color switch
+    {
+        "Red" => "border-red-500",
+        "Green" => "border-green-500",
+        "Blue" => "border-blue-500",
+        "Yellow" => "border-yellow-400",
+        _ => "border-gray-500"
+    };
+
+    private static string CardBgColor(string color) => color switch
+    {
+        "Red" => "bg-red-900/40",
+        "Green" => "bg-green-900/40",
+        "Blue" => "bg-blue-900/40",
+        "Yellow" => "bg-yellow-900/40",
+        _ => "bg-gray-800"
+    };
+
+    private static string ColorTextClass(string color) => color switch
+    {
+        "Red" => "text-red-400",
+        "Green" => "text-green-400",
+        "Blue" => "text-blue-400",
+        "Yellow" => "text-yellow-400",
+        _ => "text-gray-400"
+    };
+}

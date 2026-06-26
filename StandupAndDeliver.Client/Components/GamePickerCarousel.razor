@@ -1,0 +1,161 @@
+@* Game Picker — portrait cover-flow carousel *@
+
+<div class="game-carousel">
+    <p class="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-4 text-center">Choose a game</p>
+
+    <div class="game-carousel-viewport"
+         @onpointerdown="OnPointerDown"
+         @onpointermove="OnPointerMove"
+         @onpointerup="OnPointerUp"
+         @onpointercancel="OnPointerUp"
+         @onpointerleave="OnPointerUp">
+        <div class="game-carousel-track @(_dragging ? "is-dragging" : "")"
+             style="transform: translateX(@($"{TrackOffsetPx:F1}px"))">
+            @for (var i = 0; i < Games.Count; i++)
+            {
+                var game = Games[i];
+                var index = i;
+                var isActive = index == _focusedIndex;
+                var distance = Math.Abs(index - _focusedIndex);
+
+                <button type="button"
+                        @onclick="() => OnCardClick(index)"
+                        class="game-carousel-card @(isActive ? "is-active" : "") @(game.ComingSoon ? "is-disabled" : "")"
+                        style="--distance: @distance"
+                        aria-label="@game.Name"
+                        aria-current="@(isActive ? "true" : null)">
+                    <div class="game-carousel-card-inner">
+                        @if (!string.IsNullOrEmpty(game.ImageUrl))
+                        {
+                            <img src="@game.ImageUrl" alt="" class="game-carousel-image" loading="lazy" />
+                        }
+                        else
+                        {
+                            <div class="game-carousel-fallback game-carousel-fallback--@game.Id.ToLowerInvariant()">
+                                <span class="game-carousel-icon">@game.Icon</span>
+                            </div>
+                        }
+                        <div class="game-carousel-overlay"></div>
+                        <div class="game-carousel-caption">
+                            <div class="text-4xl mb-2 drop-shadow-lg">@game.Icon</div>
+                            <div class="text-lg font-bold text-white leading-tight">@game.Name</div>
+                            <div class="text-sm text-gray-300 mt-1">@game.Tagline</div>
+                            @if (game.ComingSoon)
+                            {
+                                <div class="text-xs text-gray-400 mt-3 font-semibold uppercase tracking-wider">Coming soon</div>
+                            }
+                            else if (game.Id == SelectedGameId)
+                            {
+                                <div class="text-xs text-yellow-400 mt-3 font-semibold uppercase tracking-wider">Selected</div>
+                            }
+                        </div>
+                    </div>
+                </button>
+            }
+        </div>
+    </div>
+
+    <div class="game-carousel-controls">
+        <button type="button"
+                class="game-carousel-nav"
+                disabled="@(_focusedIndex == 0)"
+                @onclick="() => Shift(-1)"
+                aria-label="Previous game">
+            ‹
+        </button>
+        <div class="game-carousel-dots" role="tablist" aria-label="Games">
+            @for (var i = 0; i < Games.Count; i++)
+            {
+                var index = i;
+                <button type="button"
+                        role="tab"
+                        class="game-carousel-dot @(index == _focusedIndex ? "is-active" : "")"
+                        aria-selected="@(index == _focusedIndex)"
+                        aria-label="@Games[index].Name"
+                        @onclick="() => OnCardClick(index)">
+                </button>
+            }
+        </div>
+        <button type="button"
+                class="game-carousel-nav"
+                disabled="@(_focusedIndex >= Games.Count - 1)"
+                @onclick="() => Shift(1)"
+                aria-label="Next game">
+            ›
+        </button>
+    </div>
+</div>
+
+@code {
+    public record GameOption(string Id, string Icon, string Name, string Tagline, string? ImageUrl = null, bool ComingSoon = false);
+
+    [Parameter, EditorRequired] public IReadOnlyList<GameOption> Games { get; set; } = [];
+    [Parameter] public string SelectedGameId { get; set; } = "";
+    [Parameter] public EventCallback<string> SelectedGameIdChanged { get; set; }
+
+    private const double CardWidth = 280;
+    private const double CardGap = 24;
+
+    private double _dragOffset;
+    private bool _dragging;
+    private double _pointerStartX;
+    private double _dragStartOffset;
+
+    private int _focusedIndex;
+
+    protected override void OnParametersSet()
+    {
+        var selected = Games.ToList().FindIndex(g => g.Id == SelectedGameId);
+        if (selected >= 0)
+            _focusedIndex = selected;
+    }
+
+    private double TrackOffsetPx => -_focusedIndex * (CardWidth + CardGap) + _dragOffset;
+
+    private async Task OnCardClick(int index)
+    {
+        if (index < 0 || index >= Games.Count) return;
+        _focusedIndex = index;
+
+        var game = Games[index];
+        if (!game.ComingSoon && game.Id != SelectedGameId)
+        {
+            SelectedGameId = game.Id;
+            await SelectedGameIdChanged.InvokeAsync(game.Id);
+        }
+    }
+
+    private async Task Shift(int delta)
+    {
+        var next = _focusedIndex + delta;
+        if (next < 0 || next >= Games.Count) return;
+        await OnCardClick(next);
+    }
+
+    private void OnPointerDown(PointerEventArgs e)
+    {
+        _dragging = true;
+        _pointerStartX = e.ClientX;
+        _dragStartOffset = _dragOffset;
+    }
+
+    private void OnPointerMove(PointerEventArgs e)
+    {
+        if (!_dragging) return;
+        _dragOffset = _dragStartOffset + (e.ClientX - _pointerStartX);
+    }
+
+    private async Task OnPointerUp(PointerEventArgs e)
+    {
+        if (!_dragging) return;
+        _dragging = false;
+
+        var delta = e.ClientX - _pointerStartX;
+        const double threshold = 48;
+
+        if (Math.Abs(delta) >= threshold)
+            await Shift(delta < 0 ? 1 : -1);
+
+        _dragOffset = 0;
+    }
+}

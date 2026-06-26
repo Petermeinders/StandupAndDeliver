@@ -11,11 +11,11 @@ public class GameRoomService
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _gracePeriods = new();
     private const string CodeChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-    public (GameRoom Room, string RoomCode) CreateRoom(string playerName, string connectionId)
+    public (GameRoom Room, string RoomCode) CreateRoom(string playerName, string connectionId, string gameType = "standup")
     {
         var code = GenerateUniqueCode();
         var player = new Player { Name = playerName, ConnectionId = connectionId, IsHost = true };
-        var room = new GameRoom { RoomCode = code };
+        var room = new GameRoom { RoomCode = code, GameType = gameType };
         room.Players.Add(player);
         _rooms[code] = room;
         return (room, code);
@@ -48,6 +48,7 @@ public class GameRoomService
         if (room.Phase != GamePhase.Lobby) return (null, new HubResult(false, "Game already started."));
         if (room.Players.Count(p => p.IsConnected) < 1) return (null, new HubResult(false, "At least 1 player is required to start."));
 
+        // Mark as starting immediately so concurrent calls can't pass the Lobby check twice.
         room.Phase = GamePhase.SpeakerTurn;
         room.LastActivity = DateTime.UtcNow;
         return (room, new HubResult(true));

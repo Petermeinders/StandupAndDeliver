@@ -9,4 +9,5 @@ public interface IGameClient
     Task ReceiveError(string message);
     Task ReceiveReaction(string playerName, string emoji);
     Task ReceiveTranscript(string text);
+    Task ReceiveOneOGameState(OneOGameStateDto state);
 }

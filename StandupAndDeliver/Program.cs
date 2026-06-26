@@ -6,6 +6,7 @@ using Serilog;
 using StandupAndDeliver.Client.Pages;
 using StandupAndDeliver.Components;
 using StandupAndDeliver.Data;
+using StandupAndDeliver.Games;
 using StandupAndDeliver.Hubs;
 using StandupAndDeliver.Services;
 
@@ -30,6 +31,8 @@ builder.Services.AddSingleton<PromptCardService>();
 builder.Services.AddSingleton<GameRoomService>();
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<GameTimerService>();
+builder.Services.AddSingleton<ICardGame, StandupGame>();
+builder.Services.AddSingleton<ICardGame, OneOGame>();
 builder.Services.AddHostedService<RoomCleanupService>();
 
 var app = builder.Build();
@@ -60,6 +63,26 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 
 app.UseAntiforgery();
+
+if (app.Environment.IsDevelopment())
+{
+    // Blazor WASM fingerprints _framework assets on every rebuild; avoid stale cached boot files in dev.
+    app.Use(async (context, next) =>
+    {
+        if (context.Request.Path.StartsWithSegments("/_framework"))
+        {
+            context.Response.OnStarting(() =>
+            {
+                context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+                context.Response.Headers.Pragma = "no-cache";
+                context.Response.Headers.Expires = "0";
+                return Task.CompletedTask;
+            });
+        }
+
+        await next();
+    });
+}
 
 app.UseStaticFiles();
 app.MapStaticAssets();

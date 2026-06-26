@@ -295,3 +295,200 @@ body.theme-w95 .overflow-hidden {
 .screen-fade {
     animation: fadeIn 0.3s ease-out both;
 }
+
+/* ── Game picker carousel ───────────────────────────────────────────────── */
+.game-carousel {
+    width: 100%;
+    margin-bottom: 1.5rem;
+}
+
+.game-carousel-viewport {
+    overflow: hidden;
+    width: 100%;
+    padding: 0.5rem 0 1.25rem;
+    cursor: grab;
+    touch-action: pan-y;
+    user-select: none;
+}
+
+.game-carousel-viewport:active {
+    cursor: grabbing;
+}
+
+.game-carousel-track {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    width: max-content;
+    margin: 0 auto;
+    padding: 0 calc(50% - 8.75rem);
+    transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+}
+
+.game-carousel-track.is-dragging {
+    transition: none;
+}
+
+.game-carousel-card {
+    flex: 0 0 auto;
+    width: 17.5rem;
+    border: none;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+    transform: scale(calc(1 - var(--distance, 1) * 0.08));
+    opacity: calc(1 - var(--distance, 1) * 0.22);
+    filter: brightness(calc(1 - var(--distance, 1) * 0.12));
+    transition:
+        transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 0.45s ease,
+        filter 0.45s ease;
+}
+
+.game-carousel-card.is-active {
+    transform: scale(1);
+    opacity: 1;
+    filter: brightness(1);
+    z-index: 2;
+}
+
+.game-carousel-card.is-disabled {
+    cursor: default;
+}
+
+.game-carousel-card.is-disabled:not(.is-active) {
+    opacity: 0.55;
+    filter: brightness(0.75) saturate(0.65);
+}
+
+.game-carousel-card-inner {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 2 / 3;
+    border-radius: 1.5rem;
+    overflow: hidden;
+    box-shadow:
+        0 24px 48px rgba(0, 0, 0, 0.45),
+        0 0 0 1px rgba(255, 255, 255, 0.06);
+    transition: box-shadow 0.45s ease;
+}
+
+.game-carousel-card.is-active .game-carousel-card-inner {
+    box-shadow:
+        0 28px 56px rgba(0, 0, 0, 0.55),
+        0 0 0 3px #fbbf24,
+        0 0 32px rgba(251, 191, 36, 0.25);
+}
+
+.game-carousel-image,
+.game-carousel-fallback {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.game-carousel-image {
+    object-fit: cover;
+}
+
+.game-carousel-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.game-carousel-fallback--standup {
+    background: linear-gradient(160deg, #1e293b 0%, #0f172a 45%, #422006 100%);
+}
+
+.game-carousel-fallback--oneo {
+    background: linear-gradient(160deg, #172554 0%, #1e1b4b 45%, #312e81 100%);
+}
+
+.game-carousel-fallback--coming {
+    background: linear-gradient(160deg, #1f2937 0%, #111827 50%, #374151 100%);
+}
+
+.game-carousel-icon {
+    font-size: 5rem;
+    filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.45));
+}
+
+.game-carousel-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        to top,
+        rgba(0, 0, 0, 0.88) 0%,
+        rgba(0, 0, 0, 0.35) 42%,
+        rgba(0, 0, 0, 0.08) 100%
+    );
+}
+
+.game-carousel-caption {
+    position: absolute;
+    inset: auto 0 0 0;
+    padding: 1.25rem 1rem 1.35rem;
+    text-align: center;
+    z-index: 1;
+}
+
+.game-carousel-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 0.25rem;
+}
+
+.game-carousel-nav {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(17, 24, 39, 0.75);
+    color: #e5e7eb;
+    font-size: 1.5rem;
+    line-height: 1;
+    display: grid;
+    place-items: center;
+    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+
+.game-carousel-nav:hover:not(:disabled) {
+    background: rgba(31, 41, 55, 0.95);
+    border-color: rgba(251, 191, 36, 0.45);
+}
+
+.game-carousel-nav:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.game-carousel-dots {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.game-carousel-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    border: none;
+    background: rgba(255, 255, 255, 0.22);
+    padding: 0;
+    transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.game-carousel-dot.is-active {
+    background: #fbbf24;
+    transform: scale(1.35);
+}
+
+.game-carousel-dot:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}

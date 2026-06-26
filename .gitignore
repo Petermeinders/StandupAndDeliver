@@ -51,3 +51,6 @@ standup.db-shm
 standup.db-wal
 tools/tailwindcss-linux-x64
 tools/tailwindcss-macos-arm64
+
+
+/docs/

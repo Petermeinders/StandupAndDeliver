@@ -7,3 +7,4 @@
 .gitignore
 docker-compose*.yml
 fly.toml
+docs/

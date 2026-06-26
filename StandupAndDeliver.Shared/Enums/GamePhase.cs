@@ -6,5 +6,6 @@ public enum GamePhase
     SpeakerTurn,
     Voting,
     Results,
-    GameOver
+    GameOver,
+    Playing // used by OneO and future games
 }
