@@ -44,8 +44,8 @@
     <div class="relative w-[100vw] left-1/2 -translate-x-1/2 max-w-none mb-2">
         <GamePickerCarousel Games="_gameOptions"
                             @bind-SelectedGameId="_selectedGame"
-                            FocusedGameId="_focusedGameId"
-                            FocusedGameIdChanged="OnFocusedGameChanged" />
+                            @bind-FocusedGameId="_focusedGameId"
+                            OnTapped="OnGameTapped" />
     </div>
 
     <div id="game-content" class="w-full max-w-lg">
@@ -286,9 +286,8 @@
         Nav.NavigateTo($"/room?action=join&code={_joinCode.ToUpperInvariant()}");
     }
 
-    private async Task OnFocusedGameChanged(string id)
+    private async Task OnGameTapped(string id)
     {
-        _focusedGameId = id;
         await JS.InvokeVoidAsync("gameInterop.peekScroll", "game-content");
     }
 

@@ -126,6 +126,7 @@
     [Parameter] public EventCallback<string> SelectedGameIdChanged { get; set; }
     [Parameter] public string FocusedGameId { get; set; } = "";
     [Parameter] public EventCallback<string> FocusedGameIdChanged { get; set; }
+    [Parameter] public EventCallback<string> OnTapped { get; set; }
 
     private const double CardWidth = 280;
     private const double CardGap = 24;
@@ -133,6 +134,7 @@
 
     private double _dragOffset;
     private bool _dragging;
+    private bool _fromSwipe;
     private double _pointerStartX;
     private double _dragStartOffset;
 
@@ -179,6 +181,9 @@
             SelectedGameId = game.Id;
             await SelectedGameIdChanged.InvokeAsync(game.Id);
         }
+
+        if (!_fromSwipe)
+            await OnTapped.InvokeAsync(game.Id);
     }
 
     private async Task SetFocus(int index)
@@ -221,7 +226,11 @@
         const double threshold = 48;
 
         if (Math.Abs(delta) >= threshold)
+        {
+            _fromSwipe = true;
             await Shift(delta < 0 ? 1 : -1);
+            _fromSwipe = false;
+        }
 
         _dragOffset = 0;
     }
