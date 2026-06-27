@@ -1,4 +1,4 @@
-﻿@inject GameStateService GameState
+@inject GameStateService GameState
 
 <div class="bg-gray-900 rounded-2xl p-4">
     <p class="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-3">Your Hand (@(GameState.OneOState?.MyHand.Count ?? 0) cards)</p>
@@ -15,12 +15,15 @@
                 var canPlay = IsMyTurn && CanPlay(card);
                 <button @onclick="() => OnPlayCard(card)"
                         disabled="@(!canPlay)"
-                        class="w-14 h-20 rounded-xl border-2 flex flex-col items-center justify-center gap-1 text-sm font-bold transition-all
+                        style="@CardBgStyle(card.Color)"
+                        class="w-14 h-20 rounded-xl border-2 bg-cover bg-center flex flex-col items-center justify-center relative transition-all select-none
+                               @CardBorderColor(card.Color)
                                @(canPlay
-                                   ? CardBorderColor(card.Color) + " " + CardBgColor(card.Color) + " hover:scale-105 cursor-pointer shadow-lg"
-                                   : "border-gray-700 bg-gray-800 opacity-40 cursor-not-allowed")">
-                    <span class="text-xs text-white/60 leading-none">@ColorInitial(card.Color)</span>
-                    <span class="text-white text-base leading-none">@CardLabel(card)</span>
+                                   ? "hover:scale-110 hover:-translate-y-1 cursor-pointer shadow-lg"
+                                   : "opacity-60 cursor-not-allowed")">
+                    <span class="absolute top-1 left-1.5 text-[9px] font-black text-white leading-none drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">@CardLabel(card)</span>
+                    <span class="text-white text-2xl font-black leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">@CardLabel(card)</span>
+                    <span class="absolute bottom-1 right-1.5 text-[9px] font-black text-white leading-none rotate-180 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">@CardLabel(card)</span>
                 </button>
             }
         </div>
@@ -97,34 +100,24 @@
         _ => card.Value.ToString()
     };
 
-    private static string ColorInitial(string color) => color switch
+    internal static string CardBgStyle(string color) => color switch
     {
-        "Red" => "R",
-        "Green" => "G",
-        "Blue" => "B",
-        "Yellow" => "Y",
-        "Wild" => "W",
-        _ => ""
+        "Red"    => "border-image: url(/card-red.webp);    border-image-slice: 5 fill; border-image-width: 0px; border-image-outset: initial; border-image-repeat: round;",
+        "Green"  => "border-image: url(/card-green.webp);  border-image-slice: 5 fill; border-image-width: 0px; border-image-outset: initial; border-image-repeat: round;",
+        "Blue"   => "border-image: url(/card-blue.webp);   border-image-slice: 5 fill; border-image-width: 0px; border-image-outset: initial; border-image-repeat: round;",
+        "Yellow" => "border-image: url(/card-yellow.webp); border-image-slice: 5 fill; border-image-width: 0px; border-image-outset: initial; border-image-repeat: round;",
+        "Wild"   => "border-image: url(/card-wild.webp);   border-image-slice: 5 fill; border-image-width: 0px; border-image-outset: initial; border-image-repeat: round;",
+        _        => "background-color: #374151;"
     };
 
     private static string CardBorderColor(string color) => color switch
     {
-        "Red" => "border-red-500",
-        "Green" => "border-green-500",
-        "Blue" => "border-blue-500",
-        "Yellow" => "border-yellow-400",
-        "Wild" => "border-purple-500",
+        "Red" => "border-red-400",
+        "Green" => "border-green-400",
+        "Blue" => "border-blue-400",
+        "Yellow" => "border-yellow-300",
+        "Wild" => "border-purple-400",
         _ => "border-gray-500"
-    };
-
-    private static string CardBgColor(string color) => color switch
-    {
-        "Red" => "bg-red-900/50",
-        "Green" => "bg-green-900/50",
-        "Blue" => "bg-blue-900/50",
-        "Yellow" => "bg-yellow-900/50",
-        "Wild" => "bg-purple-900/50",
-        _ => "bg-gray-800"
     };
 
     private static string WildBtnColor(string color) => color switch

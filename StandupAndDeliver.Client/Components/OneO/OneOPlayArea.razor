@@ -6,9 +6,9 @@
         <div class="flex flex-col items-center gap-2">
             <button @onclick="OnDrawCard"
                     disabled="@(!IsMyTurn)"
+                    style="border-image: url(/card-deck.webp); border-image-slice: 5 fill; border-image-width: 0px; border-image-outset: initial; border-image-repeat: round;"
                     class="w-16 h-24 rounded-xl border-2 flex items-center justify-center text-2xl font-bold transition-all
-                           @(IsMyTurn ? "border-blue-400 bg-blue-400/10 hover:bg-blue-400/20 cursor-pointer" : "border-gray-700 bg-gray-800 cursor-not-allowed opacity-60")">
-                🂠
+                           @(IsMyTurn ? "border-blue-400 hover:scale-105 cursor-pointer shadow-lg" : "border-gray-700 cursor-not-allowed opacity-60")">
             </button>
             <span class="text-xs text-gray-500">@(GameState.OneOState?.DrawPileCount ?? 0) left</span>
         </div>
@@ -16,10 +16,12 @@
         <div class="flex flex-col items-center gap-2">
             @if (GameState.OneOState?.TopDiscard is { } top)
             {
-                <div class="w-16 h-24 rounded-xl border-2 flex flex-col items-center justify-center gap-1
-                            @CardBorderColor(GameState.OneOState.CurrentColor) @CardBgColor(GameState.OneOState.CurrentColor)">
-                    <span class="text-xs text-white/70">@top.Color</span>
-                    <span class="text-2xl font-bold text-white">@CardLabel(top)</span>
+                <div class="w-16 h-24 rounded-xl border-2 flex flex-col items-center justify-center relative
+                            @CardBorderColor(GameState.OneOState.CurrentColor)"
+                     style="@OneOHand.CardBgStyle(top.Color)">
+                    <span class="absolute top-1 left-1.5 text-[9px] font-bold text-white/70 leading-none">@CardLabel(top)</span>
+                    <span class="text-3xl font-black text-white drop-shadow">@CardLabel(top)</span>
+                    <span class="absolute bottom-1 right-1.5 text-[9px] font-bold text-white/70 leading-none rotate-180">@CardLabel(top)</span>
                 </div>
             }
             <span class="text-xs text-gray-500">
@@ -68,15 +70,6 @@
         "Blue" => "border-blue-500",
         "Yellow" => "border-yellow-400",
         _ => "border-gray-500"
-    };
-
-    private static string CardBgColor(string color) => color switch
-    {
-        "Red" => "bg-red-900/40",
-        "Green" => "bg-green-900/40",
-        "Blue" => "bg-blue-900/40",
-        "Yellow" => "bg-yellow-900/40",
-        _ => "bg-gray-800"
     };
 
     private static string ColorTextClass(string color) => color switch
