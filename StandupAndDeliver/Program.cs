@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.HttpOverrides;
 using StandupAndDeliver.Endpoints;
 using Microsoft.EntityFrameworkCore;
+using Npgsql.EntityFrameworkCore.PostgreSQL;
 using Serilog;
 using StandupAndDeliver.Client.Pages;
 using StandupAndDeliver.Components;
@@ -26,7 +27,13 @@ builder.Services.AddRazorComponents()
 builder.Services.AddSignalR();
 builder.Services.AddHealthChecks();
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=standup.db";
-builder.Services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite(connectionString), ServiceLifetime.Singleton);
+builder.Services.AddDbContextFactory<AppDbContext>(options =>
+{
+    if (connectionString.StartsWith("postgresql://") || connectionString.StartsWith("postgres://"))
+        options.UseNpgsql(connectionString);
+    else
+        options.UseSqlite(connectionString);
+}, ServiceLifetime.Singleton);
 builder.Services.AddSingleton<PromptCardService>();
 builder.Services.AddSingleton<EventLogService>();
 builder.Services.AddSingleton<GameRoomService>();

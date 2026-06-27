@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.*" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <ProjectReference Include="..\StandupAndDeliver.Client\StandupAndDeliver.Client.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.5" />
@@ -39,8 +40,7 @@
     <Exec Condition="!Exists('$(TailwindCliPath)') AND !$([MSBuild]::IsOSPlatform('Windows'))" Command="mkdir -p $([System.IO.Path]::GetDirectoryName('$(TailwindCliPath)')) &amp;&amp; curl -fsSL -o $(TailwindCliPath) $(TailwindCliUrl) &amp;&amp; chmod +x $(TailwindCliPath)" ConsoleToMSBuild="true" />
   </Target>
 
-  <Target Name="BuildTailwindCSS" BeforeTargets="Build;Publish"
-          Condition="'$(SkipTailwindBuild)' != 'true'">
+  <Target Name="BuildTailwindCSS" BeforeTargets="Build;Publish" Condition="'$(SkipTailwindBuild)' != 'true'">
     <Exec Command="$(TailwindCliPath) -i $(MSBuildThisFileDirectory)..\StandupAndDeliver.Client\wwwroot\css\app.input.css -o $(MSBuildThisFileDirectory)wwwroot\css\app.css --minify" ConsoleToMSBuild="true" />
   </Target>
 
