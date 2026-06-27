@@ -29,12 +29,14 @@
                     </div>
                 }
 
+                var isLocked = LockedToGameId != null && game.Id != LockedToGameId;
                 <button type="button"
                         @onclick="() => OnCardClick(index)"
-                        class="game-carousel-card @(isActive ? "is-active" : "") @(game.ComingSoon ? "is-disabled" : "") @(game.SinglePlayer ? "is-deck-card" : "")"
+                        class="game-carousel-card @(isActive ? "is-active" : "") @(game.ComingSoon || isLocked ? "is-disabled" : "") @(game.SinglePlayer ? "is-deck-card" : "")"
                         style="--distance: @distance"
                         aria-label="@game.Name"
-                        aria-current="@(isActive ? "true" : null)">
+                        aria-current="@(isActive ? "true" : null)"
+                        disabled="@(isLocked)">
                     <div class="game-carousel-card-inner">
                         @if (!string.IsNullOrEmpty(game.ImageUrl))
                         {
@@ -76,7 +78,7 @@
     <div class="game-carousel-controls">
         <button type="button"
                 class="game-carousel-nav"
-                disabled="@(_focusedIndex == 0)"
+                disabled="@(_focusedIndex == 0 || LockedToGameId != null)"
                 @onclick="() => Shift(-1)"
                 aria-label="Previous game">
             ‹
@@ -94,13 +96,14 @@
                         class="game-carousel-dot @(index == _focusedIndex ? "is-active" : "") @(Games[index].SinglePlayer ? "is-deck-dot" : "")"
                         aria-selected="@(index == _focusedIndex)"
                         aria-label="@Games[index].Name"
+                        disabled="@(LockedToGameId != null && Games[index].Id != LockedToGameId)"
                         @onclick="() => OnCardClick(index)">
                 </button>
             }
         </div>
         <button type="button"
                 class="game-carousel-nav"
-                disabled="@(_focusedIndex >= Games.Count - 1)"
+                disabled="@(_focusedIndex >= Games.Count - 1 || LockedToGameId != null)"
                 @onclick="() => Shift(1)"
                 aria-label="Next game">
             ›
@@ -127,6 +130,8 @@
     [Parameter] public string FocusedGameId { get; set; } = "";
     [Parameter] public EventCallback<string> FocusedGameIdChanged { get; set; }
     [Parameter] public EventCallback<string> OnTapped { get; set; }
+    // When set, only this game ID is enabled; all others are visually disabled and non-selectable.
+    [Parameter] public string? LockedToGameId { get; set; }
 
     private const double CardWidth = 280;
     private const double CardGap = 24;
@@ -142,7 +147,7 @@
 
     protected override void OnParametersSet()
     {
-        if (!string.IsNullOrEmpty(FocusedGameId))
+if (!string.IsNullOrEmpty(FocusedGameId))
         {
             var focused = Games.ToList().FindIndex(g => g.Id == FocusedGameId);
             if (focused >= 0)
@@ -173,9 +178,10 @@
     private async Task OnCardClick(int index)
     {
         if (index < 0 || index >= Games.Count) return;
+        var game = Games[index];
+        if (LockedToGameId != null && game.Id != LockedToGameId) return;
         await SetFocus(index);
 
-        var game = Games[index];
         if (!game.ComingSoon && !game.SinglePlayer && game.Id != SelectedGameId)
         {
             SelectedGameId = game.Id;

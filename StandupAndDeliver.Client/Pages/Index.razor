@@ -11,7 +11,7 @@
 
 <SettingsModal @ref="_settingsModal" />
 
-<div class="landing-bg"></div>
+<div class="landing-bg" style="@_bgStyle"></div>
 <div class="min-h-screen text-white flex flex-col items-center justify-center p-6 relative z-10 overflow-x-hidden">
     <div class="w-full max-w-lg">
         <div class="flex justify-end mb-2">
@@ -41,10 +41,11 @@
         }
     </div>
 
-    <div class="relative w-[100vw] left-1/2 -translate-x-1/2 max-w-none mb-2">
+<div class="relative w-[100vw] left-1/2 -translate-x-1/2 max-w-none mb-2">
         <GamePickerCarousel Games="_gameOptions"
                             @bind-SelectedGameId="_selectedGame"
                             @bind-FocusedGameId="_focusedGameId"
+                            LockedToGameId="@_lockedGameId"
                             OnTapped="OnGameTapped" />
     </div>
 
@@ -70,7 +71,7 @@
             <GameHowToPlay GameId="@_focusedGameId" />
         }
 
-        @if (ShowPartyLobby && !string.IsNullOrEmpty(_selectedGame))
+        @if (ShowPartyLobby && !string.IsNullOrEmpty(_selectedGame) && _lockedGameId == null)
         {
             <div class="bg-gray-900 rounded-2xl p-6 mb-4">
                 <div class="flex items-baseline justify-between mb-4">
@@ -102,6 +103,8 @@
             </div>
         }
 
+        @if (ShowPartyLobby)
+        {
         <div class="bg-gray-900 rounded-2xl p-6">
             <div class="flex items-baseline justify-between mb-4">
                 <h2 class="text-lg font-semibold text-gray-300">Join a Room</h2>
@@ -137,6 +140,7 @@
                 <p class="mt-3 text-red-400 text-sm">@_joinError</p>
             }
         </div>
+        }
 
         <div class="bg-gray-900 rounded-2xl mt-4 overflow-hidden">
             <button @onclick="() => _feedbackOpen = !_feedbackOpen"
@@ -207,6 +211,17 @@
 
     private bool ShowPartyLobby =>
         _focusedGame is { SinglePlayer: false, ComingSoon: false };
+
+    private string? _lockedGameId;
+
+    private GamePickerCarousel.GameOption? _selectedGameOption =>
+        _gameOptions.FirstOrDefault(g => g.Id == _selectedGame);
+
+    private string _bgStyle =>
+        _focusedGame?.ImageUrl is { } img
+            ? $"background-image: url('{img}')"
+            : "background-image: url('/OfficeBackground.jpg')";
+
     private bool _feedbackOpen = false;
     private string _feedbackText = "";
     private bool _feedbackSubmitting;
@@ -229,6 +244,8 @@
     {
         if (!string.IsNullOrEmpty(Join))
             _joinCode = Join.ToUpperInvariant();
+        else
+            _lockedGameId = null;
         if (!string.IsNullOrEmpty(Error))
             _joinError = Error;
     }
@@ -258,9 +275,27 @@
             }
             catch { /* localStorage unavailable */ }
 
+            // If a join code was passed via URL, look up the room's game type and lock the carousel.
+            if (!string.IsNullOrEmpty(Join))
+            {
+                try
+                {
+                    var resp = await Http.GetFromJsonAsync<RoomInfoDto>($"/api/rooms/{Join.ToUpperInvariant()}/info");
+                    if (resp?.GameType is { } gameType)
+                    {
+                        _lockedGameId = gameType;
+                        _focusedGameId = gameType;
+                        _selectedGame = gameType;
+                    }
+                }
+                catch { /* room not found or server error — proceed normally */ }
+            }
+
             StateHasChanged();
         }
     }
+
+    private record RoomInfoDto(string GameType);
 
     private void OnResume()
     {

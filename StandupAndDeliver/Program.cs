@@ -107,5 +107,6 @@ app.MapHealthChecks("/health");
 app.MapAdminCardEndpoints();
 app.MapFeedbackEndpoints();
 app.MapAdminEventEndpoints();
+app.MapRoomEndpoints();
 
 app.Run();
