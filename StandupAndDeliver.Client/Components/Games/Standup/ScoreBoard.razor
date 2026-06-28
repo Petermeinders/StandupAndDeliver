@@ -1,7 +1,7 @@
 @inject GameStateService GameState
 
 @{
-    var players = GameState.State?.Players;
+    var players = GameState.PlatformState?.Players;
     var me = GameState.PlayerName;
 }
 

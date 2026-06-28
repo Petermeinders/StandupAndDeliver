@@ -34,8 +34,8 @@ public sealed class VisibilityInterop : IAsyncDisposable
                 if (_hub.State == HubConnectionState.Disconnected)
                     await _hub.StartAsync();
 
-                if (_gameState.State is not null && _gameState.PlayerName is not null)
-                    await _hub.InvokeAsync<HubResult>("RejoinRoom", _gameState.State.RoomCode, _gameState.PlayerName);
+                if (_gameState.PlatformState is not null && _gameState.PlayerName is not null)
+                    await _hub.InvokeAsync<HubResult>("RejoinRoom", _gameState.PlatformState.RoomCode, _gameState.PlayerName);
             }
             catch
             {

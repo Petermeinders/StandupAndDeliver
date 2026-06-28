@@ -3,10 +3,14 @@
 @inject SettingsService Settings
 @implements IAsyncDisposable
 
+@{
+    var standupState = GameState.GetState<StandupGameStateDto>("standup");
+}
+
 <div class="min-h-screen text-white flex flex-col items-center justify-center p-6">
     <div class="w-full max-w-md">
 
-        <p class="text-center text-gray-600 text-xs font-mono mb-3">Room: @GameState.State?.RoomCode</p>
+        <p class="text-center text-gray-600 text-xs font-mono mb-3">Room: @GameState.PlatformState?.RoomCode</p>
 
         <GameReferenceAccordions HowToPlayDefaultOpen="false" ExampleDefaultOpen="false" />
 
@@ -23,7 +27,7 @@
                     <span class="text-xs text-red-400 animate-pulse">🎙 Live</span>
                 }
             </div>
-            @if (GameState.State!.CardFlipped)
+            @if (standupState?.CardFlipped == true)
             {
                 <div class="mt-2 flex items-center justify-center gap-2">
                     <span class="text-5xl font-mono font-bold @TimerColour">@GameState.SecondsRemaining</span>
@@ -39,7 +43,7 @@
 
         <!-- 3D Card — entire card is the clickable element -->
         <div class="card-flip-scene mb-6" @onclick="OnFlip">
-            <div class="card-flip-inner @(GameState.State!.CardFlipped ? "flipped" : "")">
+            <div class="card-flip-inner @(standupState?.CardFlipped == true ? "flipped" : "")">
 
                 <!-- Front face (visible before flip): electric border card -->
                 <div class="card-face card-face-front">
@@ -66,7 +70,7 @@
                     <div class="electric-bg-glow"></div>
                     <div class="electric-content px-8">
                         @{
-                            var cardParts = (GameState.State?.PromptCardText ?? "").Split("|||");
+                            var cardParts = (standupState?.PromptCardText ?? "").Split("|||");
                             var promptText = cardParts[0];
                             var buzzParts = cardParts.Length > 1 ? cardParts[1].Split('|') : null;
                         }
@@ -88,7 +92,7 @@
             </div>
         </div>
 
-        @if (GameState.State!.CardFlipped)
+        @if (standupState?.CardFlipped == true)
         {
             @if (reactions.Count > 0)
             {
@@ -181,7 +185,7 @@
 
     protected override void OnParametersSet()
     {
-        _isHost = GameState.State?.Players
+        _isHost = GameState.PlatformState?.Players
             .Any(p => p.Name == GameState.PlayerName && p.IsHost) ?? false;
     }
 

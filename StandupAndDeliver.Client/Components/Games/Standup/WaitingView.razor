@@ -2,22 +2,26 @@
 @inject IJSRuntime JS
 @implements IDisposable
 
+@{
+    var standupState = GameState.GetState<StandupGameStateDto>("standup");
+}
+
 <div class="min-h-screen text-white flex flex-col items-center justify-center p-6">
     <div class="w-full max-w-md text-center">
 
-        <p class="text-gray-600 text-xs font-mono mb-4">Room: @GameState.State?.RoomCode</p>
+        <p class="text-gray-600 text-xs font-mono mb-4">Room: @GameState.PlatformState?.RoomCode</p>
         <p class="text-gray-400 text-sm uppercase tracking-widest mb-2">Now speaking</p>
-        <h2 class="text-3xl font-bold mb-6 text-yellow-400">@GameState.State?.ActivePlayerName</h2>
+        <h2 class="text-3xl font-bold mb-6 text-yellow-400">@standupState?.ActivePlayerName</h2>
 
         @{
             var reactions = GameState.GetActiveReactions();
         }
 
-        @if (!GameState.State!.CardFlipped)
+        @if (standupState?.CardFlipped != true)
         {
             <div class="bg-gray-900 rounded-2xl p-8 mb-6 text-center">
                 <p class="text-4xl mb-3">🃏</p>
-                <p class="text-gray-400 text-sm">Waiting for @GameState.State.ActivePlayerName to flip their card…</p>
+                <p class="text-gray-400 text-sm">Waiting for @standupState?.ActivePlayerName to flip their card…</p>
             </div>
         }
         else

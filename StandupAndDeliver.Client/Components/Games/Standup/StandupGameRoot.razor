@@ -1,0 +1,76 @@
+@inject GameStateService GameState
+
+@{
+    var platform = GameState.PlatformState;
+    var standup = GameState.GetState<StandupGameStateDto>("standup");
+}
+
+@if (platform?.Phase == GamePhase.GameOver && standup is null)
+{
+    <GameOverView />
+}
+else if (standup is not null)
+{
+    @switch (standup.SubPhase)
+    {
+        case StandupSubPhase.SpeakerTurn:
+            @if (standup.ActivePlayerName == GameState.PlayerName)
+            {
+                <div @key="@("speaker")" class="screen-fade">
+                    <SpeakerView FlipCardFunc="FlipCard" EndTurnFunc="EndTurn"
+                                 PauseTurnFunc="PauseTurn" ResumeTurnFunc="ResumeTurn"
+                                 SkipTurnFunc="SkipTurn" SendTranscriptFunc="SendTranscript" />
+                </div>
+            }
+            else
+            {
+                <div @key="@("waiting")" class="screen-fade">
+                    <WaitingView SkipTurnFunc="SkipTurn" SendReactionFunc="SendReaction" />
+                </div>
+            }
+            break;
+
+        case StandupSubPhase.Voting:
+            <div @key="@("voting")" class="screen-fade">
+                <VotingView SubmitImpressivenessFunc="SubmitImpressiveness" />
+            </div>
+            break;
+
+        case StandupSubPhase.Results:
+            <div @key="@("results")" class="screen-fade">
+                <ResultsView AdvanceTurnFunc="AdvanceTurn" />
+            </div>
+            break;
+    }
+}
+else if (platform?.Phase == GamePhase.GameOver)
+{
+    <GameOverView />
+}
+else
+{
+    <div class="min-h-screen text-white flex items-center justify-center">
+        <p class="text-gray-400">Loading…</p>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public Func<string, string?, Task<HubResult>> GameActionFunc { get; set; } = default!;
+
+    private Task<HubResult> FlipCard() => GameActionFunc("FlipCard", null);
+    private Task<HubResult> EndTurn() => GameActionFunc("EndTurn", null);
+    private Task<HubResult> PauseTurn() => GameActionFunc("PauseTurn", null);
+    private Task<HubResult> ResumeTurn() => GameActionFunc("ResumeTurn", null);
+    private Task<HubResult> SkipTurn() => GameActionFunc("SkipTurn", null);
+    private Task<HubResult> AdvanceTurn() => GameActionFunc("AdvanceTurn", null);
+
+    private Task<HubResult> SubmitImpressiveness(int rating) =>
+        GameActionFunc("SubmitImpressiveness", $"{{\"rating\":{rating}}}");
+
+    private Task SendReaction(string emoji) =>
+        GameActionFunc("SendReaction", $"{{\"emoji\":\"{emoji}\"}}").ContinueWith(_ => { });
+
+    private Task SendTranscript(string text) =>
+        GameActionFunc("SendTranscript", System.Text.Json.JsonSerializer.Serialize(new { text })).ContinueWith(_ => { });
+}

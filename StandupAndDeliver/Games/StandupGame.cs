@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+using System.Collections.Concurrent;
+using System.Text.Json;
 using Microsoft.AspNetCore.SignalR;
 using StandupAndDeliver.Hubs;
 using StandupAndDeliver.Models;
@@ -9,99 +10,143 @@ namespace StandupAndDeliver.Games;
 
 public class StandupGame(GameTimerService gameTimerService, IHubContext<GameHub, IGameClient> hubContext) : ICardGame
 {
+    private readonly ConcurrentDictionary<string, StandupRoomState> _states = new();
+
     public string GameType => "standup";
 
     public async Task StartGame(GameRoom room, string connectionId)
     {
-        // Phase is already set to SpeakerTurn by GameRoomService.StartGame()
-        await gameTimerService.StartTurnAsync(room);
+        var state = new StandupRoomState();
+        _states[room.RoomCode] = state;
+        await gameTimerService.StartTurnAsync(room, state);
     }
 
     public async Task<HubResult> HandleAction(string action, string? payloadJson, GameRoom room, string connectionId)
     {
+        if (!_states.TryGetValue(room.RoomCode, out var state))
+            return new HubResult(false, "Game state not found.");
+
         return action switch
         {
-            "EndTurn" => await EndTurn(room, connectionId),
-            "SkipTurn" => await SkipTurn(room, connectionId),
-            "FlipCard" => await FlipCard(room, connectionId),
-            "PauseTurn" => await PauseTurn(room, connectionId),
-            "ResumeTurn" => await ResumeTurn(room, connectionId),
-            "SubmitImpressiveness" => await SubmitImpressiveness(room, connectionId, payloadJson),
-            "AdvanceTurn" => await AdvanceTurn(room, connectionId),
-            "SendTranscript" => await SendTranscript(room, connectionId, payloadJson),
-            "SendReaction" => await SendReaction(room, connectionId, payloadJson),
+            "EndTurn"              => await EndTurn(room, state, connectionId),
+            "SkipTurn"             => await SkipTurn(room, state, connectionId),
+            "FlipCard"             => await FlipCard(room, state, connectionId),
+            "PauseTurn"            => await PauseTurn(room, state, connectionId),
+            "ResumeTurn"           => await ResumeTurn(room, state, connectionId),
+            "SubmitImpressiveness" => await SubmitImpressiveness(room, state, connectionId, payloadJson),
+            "AdvanceTurn"          => await AdvanceTurn(room, state, connectionId),
+            "SendTranscript"       => await SendTranscript(room, state, connectionId, payloadJson),
+            "SendReaction"         => await SendReaction(room, state, connectionId, payloadJson),
             _ => new HubResult(false, $"Unknown action: {action}")
         };
     }
 
     public async Task OnPlayerDisconnected(GameRoom room, string connectionId)
     {
-        var activeSpeaker = room.Phase == GamePhase.SpeakerTurn
-            ? room.Players[room.CurrentSpeakerIndex] : null;
+        if (!_states.TryGetValue(room.RoomCode, out var state)) return;
 
-        if (room.Phase == GamePhase.SpeakerTurn && activeSpeaker is not null && activeSpeaker.IsConnected)
-        {
-            var cardText = await gameTimerService.GetActiveCardTextAsync(room.RoomCode);
-            await hubContext.Clients.GroupExcept(room.RoomCode, activeSpeaker.ConnectionId)
-                .ReceiveGameState(GameHub.BuildStateDto(room, activeSpeaker.ConnectionId));
-            await hubContext.Clients.Client(activeSpeaker.ConnectionId)
-                .ReceiveGameState(GameHub.BuildStateDto(room, activeSpeaker.ConnectionId, cardText));
-        }
+        var activeSpeaker = state.SubPhase == StandupSubPhase.SpeakerTurn
+            ? room.Players[state.CurrentSpeakerIndex] : null;
+
+        if (activeSpeaker is not null && activeSpeaker.IsConnected)
+            await gameTimerService.BroadcastStandupPerClient(room, state, activeSpeaker.ConnectionId);
         else
-        {
-            await hubContext.Clients.Group(room.RoomCode)
-                .ReceiveGameState(GameHub.BuildStateDto(room, activeSpeaker?.ConnectionId));
-        }
+            await gameTimerService.BroadcastStandupPerClient(room, state, activeSpeaker?.ConnectionId ?? "");
     }
 
-    private async Task<HubResult> FlipCard(GameRoom room, string connectionId)
+    public async Task OnPlayerRejoined(GameRoom room, string connectionId)
     {
-        if (room.Phase != GamePhase.SpeakerTurn) return new HubResult(false, "No active turn.");
-        var speaker = room.Players[room.CurrentSpeakerIndex];
+        if (!_states.TryGetValue(room.RoomCode, out var state)) return;
+
+        var activeSpeaker = state.SubPhase == StandupSubPhase.SpeakerTurn
+            ? room.Players[state.CurrentSpeakerIndex] : null;
+        var isActiveSpeaker = activeSpeaker?.ConnectionId == connectionId;
+        var cardText = isActiveSpeaker || state.SubPhase == StandupSubPhase.Results
+            ? await gameTimerService.GetActiveCardTextAsync(room.RoomCode) : null;
+
+        var eligible = room.Players.Count(p => p.IsConnected) - 1;
+        var includeTranscript = state.SubPhase is StandupSubPhase.Voting or StandupSubPhase.Results;
+        var dto = new StandupGameStateDto(
+            SubPhase: state.SubPhase,
+            ActivePlayerName: activeSpeaker?.Name,
+            SecondsRemaining: null,
+            PromptCardText: cardText,
+            VotesSubmitted: state.CurrentTurnImpressiveness.Count,
+            VotesTotal: eligible,
+            LastTurnResult: null,
+            CardFlipped: state.CardFlipped,
+            LastTranscript: includeTranscript ? state.CurrentTranscript : null
+        );
+        await hubContext.Clients.Client(connectionId)
+            .ReceiveGameSpecificState("standup", JsonSerializer.Serialize(dto));
+
+        // Also update everyone else's player list (reconnected player is now IsConnected = true)
+        await gameTimerService.BroadcastStandupPerClient(room, state, activeSpeaker?.ConnectionId ?? "");
+    }
+
+    public async Task OnPlayerGraceExpired(GameRoom room, string playerName, bool wasHost)
+    {
+        if (!_states.TryGetValue(room.RoomCode, out var state)) return;
+
+        var isActiveSpeaker = state.SubPhase == StandupSubPhase.SpeakerTurn
+            && room.Players[state.CurrentSpeakerIndex].Name == playerName;
+
+        if (isActiveSpeaker)
+            await gameTimerService.EndTurnAsync(room, state);
+        else if (wasHost && state.SubPhase == StandupSubPhase.Results)
+            await gameTimerService.AdvanceToNextTurnAsync(room, state);
+    }
+
+    // ── Action handlers ───────────────────────────────────────────────────────
+
+    private async Task<HubResult> FlipCard(GameRoom room, StandupRoomState state, string connectionId)
+    {
+        if (state.SubPhase != StandupSubPhase.SpeakerTurn) return new HubResult(false, "No active turn.");
+        var speaker = room.Players[state.CurrentSpeakerIndex];
         if (speaker.ConnectionId != connectionId) return new HubResult(false, "Only the active speaker can flip the card.");
-        await gameTimerService.FlipCardAsync(room);
+        await gameTimerService.FlipCardAsync(room, state);
         return new HubResult(true);
     }
 
-    private async Task<HubResult> EndTurn(GameRoom room, string connectionId)
+    private async Task<HubResult> EndTurn(GameRoom room, StandupRoomState state, string connectionId)
     {
-        if (room.Phase != GamePhase.SpeakerTurn) return new HubResult(false, "No active turn.");
-        var speaker = room.Players[room.CurrentSpeakerIndex];
+        if (state.SubPhase != StandupSubPhase.SpeakerTurn) return new HubResult(false, "No active turn.");
+        var speaker = room.Players[state.CurrentSpeakerIndex];
         if (speaker.ConnectionId != connectionId) return new HubResult(false, "Only the active speaker can end their turn.");
-        await gameTimerService.EndTurnAsync(room);
+        await gameTimerService.EndTurnAsync(room, state);
         return new HubResult(true);
     }
 
-    private async Task<HubResult> SkipTurn(GameRoom room, string connectionId)
+    private async Task<HubResult> SkipTurn(GameRoom room, StandupRoomState state, string connectionId)
     {
         var caller = room.Players.FirstOrDefault(p => p.ConnectionId == connectionId);
         if (caller is null || !caller.IsHost) return new HubResult(false, "Only the host can skip a turn.");
-        if (room.Phase != GamePhase.SpeakerTurn) return new HubResult(false, "No active speaker turn to skip.");
-        await gameTimerService.EndTurnAsync(room);
+        if (state.SubPhase != StandupSubPhase.SpeakerTurn) return new HubResult(false, "No active speaker turn to skip.");
+        await gameTimerService.EndTurnAsync(room, state);
         return new HubResult(true);
     }
 
-    private async Task<HubResult> PauseTurn(GameRoom room, string connectionId)
+    private async Task<HubResult> PauseTurn(GameRoom room, StandupRoomState state, string connectionId)
     {
-        if (room.Phase != GamePhase.SpeakerTurn) return new HubResult(false, "No active turn.");
-        var speaker = room.Players[room.CurrentSpeakerIndex];
+        if (state.SubPhase != StandupSubPhase.SpeakerTurn) return new HubResult(false, "No active turn.");
+        var speaker = room.Players[state.CurrentSpeakerIndex];
         if (speaker.ConnectionId != connectionId) return new HubResult(false, "Only the active speaker can pause.");
-        var paused = await gameTimerService.PauseTurnAsync(room);
+        var paused = await gameTimerService.PauseTurnAsync(room, state);
         return paused ? new HubResult(true) : new HubResult(false, "Already paused.");
     }
 
-    private async Task<HubResult> ResumeTurn(GameRoom room, string connectionId)
+    private async Task<HubResult> ResumeTurn(GameRoom room, StandupRoomState state, string connectionId)
     {
-        if (room.Phase != GamePhase.SpeakerTurn) return new HubResult(false, "No active turn.");
-        var speaker = room.Players[room.CurrentSpeakerIndex];
+        if (state.SubPhase != StandupSubPhase.SpeakerTurn) return new HubResult(false, "No active turn.");
+        var speaker = room.Players[state.CurrentSpeakerIndex];
         if (speaker.ConnectionId != connectionId) return new HubResult(false, "Only the active speaker can resume.");
-        var resumed = await gameTimerService.ResumeTurnAsync(room);
+        var resumed = await gameTimerService.ResumeTurnAsync(room, state);
         return resumed ? new HubResult(true) : new HubResult(false, "Not paused.");
     }
 
-    private async Task<HubResult> SubmitImpressiveness(GameRoom room, string connectionId, string? payloadJson)
+    private async Task<HubResult> SubmitImpressiveness(GameRoom room, StandupRoomState state, string connectionId, string? payloadJson)
     {
-        if (room.Phase != GamePhase.Voting) return new HubResult(false, "Not in voting phase.");
+        if (state.SubPhase != StandupSubPhase.Voting) return new HubResult(false, "Not in voting phase.");
         if (string.IsNullOrEmpty(payloadJson)) return new HubResult(false, "Rating required.");
 
         int rating;
@@ -114,34 +159,34 @@ public class StandupGame(GameTimerService gameTimerService, IHubContext<GameHub,
 
         if (rating < 1 || rating > 5) return new HubResult(false, "Rating must be between 1 and 5.");
 
-        var speaker = room.Players[room.CurrentSpeakerIndex];
+        var speaker = room.Players[state.CurrentSpeakerIndex];
         if (speaker.ConnectionId == connectionId) return new HubResult(false, "The active speaker cannot rate their own performance.");
 
         await room.Lock.WaitAsync();
         try
         {
-            if (room.CurrentTurnImpressiveness.ContainsKey(connectionId)) return new HubResult(false, "You have already submitted your rating.");
-            room.CurrentTurnImpressiveness[connectionId] = rating;
+            if (state.CurrentTurnImpressiveness.ContainsKey(connectionId)) return new HubResult(false, "You have already submitted your rating.");
+            state.CurrentTurnImpressiveness[connectionId] = rating;
         }
         finally { room.Lock.Release(); }
 
-        await gameTimerService.OnImpressivenessSubmittedAsync(room);
+        await gameTimerService.OnImpressivenessSubmittedAsync(room, state);
         return new HubResult(true);
     }
 
-    private async Task<HubResult> AdvanceTurn(GameRoom room, string connectionId)
+    private async Task<HubResult> AdvanceTurn(GameRoom room, StandupRoomState state, string connectionId)
     {
         var caller = room.Players.FirstOrDefault(p => p.ConnectionId == connectionId);
         if (caller is null || !caller.IsHost) return new HubResult(false, "Only the host can advance the turn.");
-        if (room.Phase != GamePhase.Results) return new HubResult(false, "Game is not in Results phase.");
-        await gameTimerService.AdvanceToNextTurnAsync(room);
+        if (state.SubPhase != StandupSubPhase.Results) return new HubResult(false, "Game is not in Results phase.");
+        await gameTimerService.AdvanceToNextTurnAsync(room, state);
         return new HubResult(true);
     }
 
-    private async Task<HubResult> SendTranscript(GameRoom room, string connectionId, string? payloadJson)
+    private async Task<HubResult> SendTranscript(GameRoom room, StandupRoomState state, string connectionId, string? payloadJson)
     {
-        if (room.Phase != GamePhase.SpeakerTurn) return new HubResult(true);
-        var speaker = room.Players[room.CurrentSpeakerIndex];
+        if (state.SubPhase != StandupSubPhase.SpeakerTurn) return new HubResult(true);
+        var speaker = room.Players[state.CurrentSpeakerIndex];
         if (speaker.ConnectionId != connectionId) return new HubResult(true);
 
         string text = "";
@@ -152,15 +197,15 @@ public class StandupGame(GameTimerService gameTimerService, IHubContext<GameHub,
         }
         if (string.IsNullOrEmpty(text) || text.Length > 2000) return new HubResult(true);
 
-        room.CurrentTranscript = text;
+        state.CurrentTranscript = text;
         await hubContext.Clients.GroupExcept(room.RoomCode, connectionId).ReceiveTranscript(text);
         return new HubResult(true);
     }
 
-    private async Task<HubResult> SendReaction(GameRoom room, string connectionId, string? payloadJson)
+    private async Task<HubResult> SendReaction(GameRoom room, StandupRoomState state, string connectionId, string? payloadJson)
     {
-        if (room.Phase != GamePhase.SpeakerTurn) return new HubResult(true);
-        if (room.Players[room.CurrentSpeakerIndex].ConnectionId == connectionId) return new HubResult(true);
+        if (state.SubPhase != StandupSubPhase.SpeakerTurn) return new HubResult(true);
+        if (room.Players[state.CurrentSpeakerIndex].ConnectionId == connectionId) return new HubResult(true);
 
         string emoji = "";
         if (!string.IsNullOrEmpty(payloadJson))

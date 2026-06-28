@@ -1,35 +1,36 @@
 @inject GameStateService GameState
 @inject IJSRuntime JS
 
+@{
+    var standupState = GameState.GetState<StandupGameStateDto>("standup");
+    var turnResult = standupState?.LastTurnResult;
+}
+
 <div class="min-h-screen text-white flex flex-col items-center justify-center p-6">
     <div class="w-full max-w-md">
 
-        <p class="text-center text-gray-600 text-xs font-mono mb-4">Room: @GameState.State?.RoomCode</p>
-
-        @{
-            var result = GameState.State?.LastTurnResult;
-        }
+        <p class="text-center text-gray-600 text-xs font-mono mb-4">Room: @GameState.PlatformState?.RoomCode</p>
 
         <p class="text-center text-gray-400 text-xs uppercase tracking-widest mb-2">The prompt was…</p>
 
         <div class="bg-yellow-400 text-black rounded-2xl p-6 mb-6 text-center shadow-lg">
-            <p class="text-lg font-bold leading-snug">@(result?.PromptCardText?.Split("|||")[0])</p>
+            <p class="text-lg font-bold leading-snug">@(turnResult?.PromptCardText?.Split("|||")[0])</p>
         </div>
 
-        @if (result is not null)
+        @if (turnResult is not null)
         {
             <div class="bg-gray-900 rounded-2xl p-6 mb-6 space-y-4">
                 <div class="flex justify-between items-center">
                     <span class="text-gray-400 text-sm">Speaker</span>
-                    <span class="font-semibold">@result.ActivePlayerName</span>
+                    <span class="font-semibold">@turnResult.ActivePlayerName</span>
                 </div>
                 <div class="flex justify-between items-center">
                     <span class="text-gray-400 text-sm">Impressiveness</span>
-                    <span class="font-semibold text-yellow-400">@result.ImpressionScore.ToString("F1")</span>
+                    <span class="font-semibold text-yellow-400">@turnResult.ImpressionScore.ToString("F1")</span>
                 </div>
                 <div class="border-t border-gray-700 pt-4 flex justify-between items-center">
                     <span class="text-gray-300 font-semibold">Turn score</span>
-                    <span class="text-yellow-400 font-bold text-lg">+@result.TurnScore</span>
+                    <span class="text-yellow-400 font-bold text-lg">+@turnResult.TurnScore</span>
                 </div>
             </div>
         }
@@ -65,13 +66,14 @@
 
     protected override void OnParametersSet()
     {
-        _isHost = GameState.State?.Players
+        _isHost = GameState.PlatformState?.Players
             .Any(p => p.Name == GameState.PlayerName && p.IsHost) ?? false;
 
-        var state = GameState.State;
-        if (state is null) return;
-        var speakerIndex = state.Players.ToList().FindIndex(p => p.Name == state.ActivePlayerName);
-        _nextLabel = speakerIndex >= state.Players.Count - 1 ? "See Final Results" : "Next Turn";
+        var platform = GameState.PlatformState;
+        var standup = GameState.GetState<StandupGameStateDto>("standup");
+        if (platform is null || standup is null) return;
+        var speakerIndex = platform.Players.ToList().FindIndex(p => p.Name == standup.ActivePlayerName);
+        _nextLabel = speakerIndex >= platform.Players.Count - 1 ? "See Final Results" : "Next Turn";
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

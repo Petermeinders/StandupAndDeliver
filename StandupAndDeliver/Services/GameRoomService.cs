@@ -49,7 +49,7 @@ public class GameRoomService
         if (room.Players.Count(p => p.IsConnected) < 1) return (null, new HubResult(false, "At least 1 player is required to start."));
 
         // Mark as starting immediately so concurrent calls can't pass the Lobby check twice.
-        room.Phase = GamePhase.SpeakerTurn;
+        room.Phase = GamePhase.Playing;
         room.LastActivity = DateTime.UtcNow;
         return (room, new HubResult(true));
     }

@@ -1,13 +1,17 @@
 @inject GameStateService GameState
 @inject IJSRuntime JS
 
+@{
+    var standupState = GameState.GetState<StandupGameStateDto>("standup");
+}
+
 <div class="min-h-screen text-white flex flex-col items-center justify-center p-6">
     <div class="w-full max-w-md">
 
-        <p class="text-center text-gray-600 text-xs font-mono mb-6">Room: @GameState.State?.RoomCode</p>
+        <p class="text-center text-gray-600 text-xs font-mono mb-6">Room: @GameState.PlatformState?.RoomCode</p>
 
         <p class="text-center text-gray-400 text-sm uppercase tracking-widest mb-1">Now speaking</p>
-        <h2 class="text-2xl font-bold text-center mb-4">@GameState.State?.ActivePlayerName</h2>
+        <h2 class="text-2xl font-bold text-center mb-4">@standupState?.ActivePlayerName</h2>
 
         @if (!string.IsNullOrWhiteSpace(GameState.CurrentTranscript))
         {
@@ -24,7 +28,7 @@
             <div class="bg-gray-900 rounded-2xl p-8 text-center">
                 <p class="text-gray-400">Others are rating your performance…</p>
                 <p class="mt-4 text-sm text-gray-500">
-                    @GameState.State?.VotesSubmitted of @GameState.State?.VotesTotal ratings submitted
+                    @(standupState?.VotesSubmitted ?? 0) of @(standupState?.VotesTotal ?? 0) ratings submitted
                 </p>
             </div>
         }
@@ -33,7 +37,7 @@
             <div class="bg-gray-900 rounded-2xl p-8 text-center">
                 <p class="text-green-400 font-semibold mb-2">Rating submitted!</p>
                 <p class="text-sm text-gray-500">
-                    @GameState.State?.VotesSubmitted of @GameState.State?.VotesTotal ratings submitted
+                    @(standupState?.VotesSubmitted ?? 0) of @(standupState?.VotesTotal ?? 0) ratings submitted
                 </p>
                 <p class="mt-4 text-xs text-gray-600">The prompt card will be revealed once everyone has rated.</p>
             </div>
@@ -70,7 +74,7 @@
             }
 
             <p class="mt-4 text-center text-sm text-gray-600">
-                @GameState.State?.VotesSubmitted of @GameState.State?.VotesTotal ratings submitted
+                @(standupState?.VotesSubmitted ?? 0) of @(standupState?.VotesTotal ?? 0) ratings submitted
             </p>
         }
         <ScoreBoard />
@@ -89,7 +93,7 @@
 
     protected override void OnParametersSet()
     {
-        _isActiveSpeaker = GameState.State?.ActivePlayerName == GameState.PlayerName;
+        _isActiveSpeaker = GameState.GetState<StandupGameStateDto>("standup")?.ActivePlayerName == GameState.PlayerName;
     }
 
     private async Task OnRatingSelect(int score)

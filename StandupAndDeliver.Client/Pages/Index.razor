@@ -1,6 +1,7 @@
 @page "/"
 @rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
 @inject GameStateService GameState
+@inject GameRegistry Registry
 @inject NavigationManager Nav
 @inject HttpClient Http
 @inject ThemeService Theme
@@ -190,18 +191,23 @@
     [Parameter, SupplyParameterFromQuery] public string? Error { get; set; }
     [Parameter, SupplyParameterFromQuery] public string? Join { get; set; }
 
-    private readonly List<GamePickerCarousel.GameOption> _gameOptions =
-    [
-        new("standup", "🎤", "Standup & Deliver", "Corporate chaos", "/StandupAndDeliverBanner.jpg"),
-        new("OneO", "🃏", "OneO", "Classic card game", "/OneOCover.png"),
-        new("coming", "✨", "More Soon", "Stay tuned", ComingSoon: true),
-        new("crypt-sweepers", "💀", "Crypt Sweepers", "Every tile a treasure. Every step a death sentence.",
+    private List<GamePickerCarousel.GameOption> _gameOptions = [];
+
+    private List<GamePickerCarousel.GameOption> BuildGameOptions()
+    {
+        var options = Registry.Games
+            .Select(g => new GamePickerCarousel.GameOption(g.Id, g.Icon, g.Name, g.Tagline, g.ImageUrl))
+            .ToList();
+        options.Add(new("coming", "✨", "More Soon", "Stay tuned", ComingSoon: true));
+        options.Add(new("crypt-sweepers", "💀", "Crypt Sweepers",
+            "Every tile a treasure. Every step a death sentence.",
             "/CryptSweepersCover.png",
             SinglePlayer: true,
             ExternalUrl: "https://crypt-sweepers.com",
             SeparatorBefore: true,
-            SeparatorLabel: "Single Player"),
-    ];
+            SeparatorLabel: "Single Player"));
+        return options;
+    }
 
     private string _selectedGame = "standup";
     private string _focusedGameId = "standup";
@@ -239,6 +245,11 @@
     private SettingsModal? _settingsModal;
     private string? _resumeCode;
     private string? _resumeName;
+
+    protected override void OnInitialized()
+    {
+        _gameOptions = BuildGameOptions();
+    }
 
     protected override void OnParametersSet()
     {

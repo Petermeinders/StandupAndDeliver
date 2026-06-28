@@ -9,11 +9,5 @@ public class GameRoom
     public GamePhase Phase { get; set; } = GamePhase.Lobby;
     public SemaphoreSlim Lock { get; set; } = new(1, 1);
     public DateTime LastActivity { get; set; } = DateTime.UtcNow;
-    public int CurrentSpeakerIndex { get; set; }
-    public HashSet<int> UsedCardIds { get; set; } = [];
-    public Dictionary<string, int> CurrentTurnImpressiveness { get; set; } = [];
-    public int? ActiveCardId { get; set; }
-    public bool CardFlipped { get; set; }
-    public string CurrentTranscript { get; set; } = "";
-    public string GameType { get; set; } = "standup"; // "standup" | "OneO"
+    public string GameType { get; set; } = "standup";
 }

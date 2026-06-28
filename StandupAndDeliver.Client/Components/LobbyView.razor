@@ -1,14 +1,17 @@
 @inject GameStateService GameState
+@inject GameRegistry Registry
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
+@{
+    var gameType = GameState.PlatformState?.GameType;
+    var registration = gameType is not null ? Registry.Get(gameType) : null;
+    var coverImage = registration?.ImageUrl;
+    var gameTitle = registration?.Name ?? gameType ?? "Game";
+}
+
 <div class="min-h-screen text-white flex flex-col items-center justify-center p-6">
     <div class="w-full max-w-md">
-
-        @{
-            var coverImage = GameDisplayNames.GetCoverImage(GameState.State?.GameType);
-            var gameTitle = GameDisplayNames.GetTitle(GameState.State?.GameType);
-        }
 
         <div class="flex flex-col items-center mb-2">
             @if (!string.IsNullOrEmpty(coverImage))
@@ -19,7 +22,7 @@
             }
             <h1 class="text-3xl font-bold text-center">@gameTitle</h1>
         </div>
-        <p class="text-center text-gray-400 mb-6">Room code: <span class="font-mono font-bold text-yellow-400 text-2xl tracking-widest">@GameState.State!.RoomCode</span></p>
+        <p class="text-center text-gray-400 mb-6">Room code: <span class="font-mono font-bold text-yellow-400 text-2xl tracking-widest">@GameState.PlatformState!.RoomCode</span></p>
 
         <div class="bg-gray-900 rounded-2xl p-5 mb-6 flex flex-col items-center gap-3">
             <p class="text-xs text-gray-400 uppercase tracking-widest">Scan to join</p>
@@ -34,9 +37,9 @@
         </div>
 
         <div class="bg-gray-900 rounded-2xl p-6 mb-6">
-            <h2 class="text-lg font-semibold mb-4 text-gray-300">Players (@GameState.State.Players.Count)</h2>
+            <h2 class="text-lg font-semibold mb-4 text-gray-300">Players (@GameState.PlatformState.Players.Count)</h2>
             <ul class="space-y-2">
-                @foreach (var player in GameState.State.Players)
+                @foreach (var player in GameState.PlatformState.Players)
                 {
                     <li class="flex items-center gap-3">
                         <span class="w-2 h-2 rounded-full @(player.IsConnected ? "bg-green-400" : "bg-gray-600")"></span>
@@ -72,7 +75,7 @@
         }
 
         <div class="mt-6">
-            <GameHowToPlay GameId="@(GameState.State?.GameType ?? "standup")" />
+            <GameHowToPlay GameId="@(GameState.PlatformState?.GameType ?? "standup")" />
         </div>
     </div>
 </div>
@@ -87,14 +90,14 @@
     private string? _error;
 
     private string JoinUrl =>
-        $"{Nav.BaseUri.TrimEnd('/')}?join={GameState.State?.RoomCode}";
+        $"{Nav.BaseUri.TrimEnd('/')}?join={GameState.PlatformState?.RoomCode}";
 
     private string QrCodeUrl =>
         $"https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=10&data={Uri.EscapeDataString(JoinUrl)}";
 
     protected override void OnParametersSet()
     {
-        _isHost = GameState.State?.Players
+        _isHost = GameState.PlatformState?.Players
             .Any(p => p.Name == GameState.PlayerName && p.IsHost) ?? false;
     }
 

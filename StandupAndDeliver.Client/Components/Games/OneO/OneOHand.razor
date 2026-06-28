@@ -1,19 +1,23 @@
 @inject GameStateService GameState
 @inject IJSRuntime JS
 
-<div class="bg-gray-900 rounded-2xl p-4">
-    <p class="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-3">Your Hand (@(GameState.OneOState?.MyHand.Count ?? 0) cards)</p>
+@{
+    var oneOState = GameState.GetState<OneOGameStateDto>("OneO");
+}
 
-    @if (GameState.OneOState is null || GameState.OneOState.MyHand.Count == 0)
+<div class="bg-gray-900 rounded-2xl p-4">
+    <p class="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-3">Your Hand (@(oneOState?.MyHand.Count ?? 0) cards)</p>
+
+    @if (oneOState is null || oneOState.MyHand.Count == 0)
     {
         <p class="text-gray-600 text-sm text-center py-4">No cards</p>
     }
     else
     {
         <div class="flex flex-wrap gap-2">
-            @foreach (var card in GameState.OneOState.MyHand)
+            @foreach (var card in oneOState.MyHand)
             {
-                var canPlay = IsMyTurn && CanPlay(card);
+                var canPlay = IsMyTurn && CanPlay(card, oneOState);
                 <button @onclick="() => OnPlayCard(card)"
                         disabled="@(!canPlay)"
                         style="@CardBgStyle(card.Color)"
@@ -54,12 +58,11 @@
     private OneOCardDto? _pendingWildCard;
     private bool _showColorPicker;
 
-    private bool IsMyTurn => GameState.OneOState?.CurrentPlayerName == GameState.PlayerName;
+    private bool IsMyTurn => GameState.GetState<OneOGameStateDto>("OneO")?.CurrentPlayerName == GameState.PlayerName;
 
-    private bool CanPlay(OneOCardDto card)
+    private static bool CanPlay(OneOCardDto card, OneOGameStateDto state)
     {
-        var state = GameState.OneOState;
-        if (state?.TopDiscard is null) return false;
+        if (state.TopDiscard is null) return false;
         if (card.Type is "Wild" or "WildDrawFour") return true;
         if (card.Color == state.CurrentColor) return true;
         var top = state.TopDiscard;
@@ -70,7 +73,8 @@
 
     private async Task OnPlayCard(OneOCardDto card)
     {
-        if (!IsMyTurn || !CanPlay(card)) return;
+        var state = GameState.GetState<OneOGameStateDto>("OneO");
+        if (!IsMyTurn || state is null || !CanPlay(card, state)) return;
 
         if (card.Type is "Wild" or "WildDrawFour")
         {

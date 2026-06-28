@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.SignalR;
 using StandupAndDeliver.Hubs;
 using StandupAndDeliver.Models;
@@ -17,89 +18,81 @@ public class GameTimerService(
     private readonly Dictionary<string, CancellationTokenSource> _voteTimers = new();
     private readonly Dictionary<string, string> _activeCardText = new();
     private readonly Dictionary<string, int> _pausedSeconds = new();
-    private readonly Dictionary<string, int> _currentSeconds = new(); // live tracking
+    private readonly Dictionary<string, int> _currentSeconds = new();
 
     // ── Turn start ────────────────────────────────────────────────────────────
 
-    public async Task StartTurnAsync(GameRoom room)
+    public async Task StartTurnAsync(GameRoom room, StandupRoomState state)
     {
         CancelAll(room.RoomCode);
         _pausedSeconds.Remove(room.RoomCode);
 
-        // Skip any disconnected players whose turn it is, so the game doesn't stall
-        // waiting for a card flip that will never come.
-        while (room.CurrentSpeakerIndex < room.Players.Count
-               && !room.Players[room.CurrentSpeakerIndex].IsConnected)
+        // Skip disconnected players so the game doesn't stall waiting for a flip.
+        while (state.CurrentSpeakerIndex < room.Players.Count
+               && !room.Players[state.CurrentSpeakerIndex].IsConnected)
         {
             logger.LogInformation("Room {RoomCode}: speaker {Name} is disconnected — skipping their turn.",
-                room.RoomCode, room.Players[room.CurrentSpeakerIndex].Name);
-            room.CurrentSpeakerIndex++;
+                room.RoomCode, room.Players[state.CurrentSpeakerIndex].Name);
+            state.CurrentSpeakerIndex++;
         }
 
-        if (room.CurrentSpeakerIndex >= room.Players.Count)
+        if (state.CurrentSpeakerIndex >= room.Players.Count)
         {
             room.Phase = GamePhase.GameOver;
             room.LastActivity = DateTime.UtcNow;
-            await hubContext.Clients.Group(room.RoomCode).ReceiveGameState(GameHub.BuildStateDto(room));
+            await BroadcastLean(room);
             return;
         }
 
-        var card = await promptCardService.DrawCardAsync(room.UsedCardIds);
+        var card = await promptCardService.DrawCardAsync(state.UsedCardIds);
         if (card is null)
         {
             logger.LogWarning("Room {RoomCode}: no cards left — ending game.", room.RoomCode);
             room.Phase = GamePhase.GameOver;
             room.LastActivity = DateTime.UtcNow;
-            await hubContext.Clients.Group(room.RoomCode).ReceiveGameState(GameHub.BuildStateDto(room));
+            await BroadcastLean(room);
             return;
         }
 
-        room.ActiveCardId = card.Id;
-        room.UsedCardIds.Add(card.Id);
-        room.CurrentTurnImpressiveness.Clear();
-        room.CurrentTranscript = "";
-        room.CardFlipped = false;
+        state.ActiveCardId = card.Id;
+        state.UsedCardIds.Add(card.Id);
+        state.CurrentTurnImpressiveness.Clear();
+        state.CurrentTranscript = "";
+        state.CardFlipped = false;
+        state.SubPhase = StandupSubPhase.SpeakerTurn;
         room.LastActivity = DateTime.UtcNow;
         _activeCardText[room.RoomCode] = card.Text;
 
-        var speaker = room.Players[room.CurrentSpeakerIndex];
-        await hubContext.Clients.GroupExcept(room.RoomCode, speaker.ConnectionId)
-            .ReceiveGameState(GameHub.BuildStateDto(room, speaker.ConnectionId));
-        await hubContext.Clients.Client(speaker.ConnectionId)
-            .ReceiveGameState(GameHub.BuildStateDto(room, speaker.ConnectionId, card.Text));
+        var speaker = room.Players[state.CurrentSpeakerIndex];
+        await BroadcastLean(room);
+        await BroadcastStandupPerClient(room, state, speaker.ConnectionId);
         // Timer does NOT start here — speaker must flip the card first
     }
 
-    public async Task FlipCardAsync(GameRoom room)
+    public async Task FlipCardAsync(GameRoom room, StandupRoomState state)
     {
-        if (room.CardFlipped) return;
-        room.CardFlipped = true;
+        if (state.CardFlipped) return;
+        state.CardFlipped = true;
         room.LastActivity = DateTime.UtcNow;
 
-        var speaker = room.Players[room.CurrentSpeakerIndex];
-        var cardText = _activeCardText.GetValueOrDefault(room.RoomCode, "");
+        var speaker = room.Players[state.CurrentSpeakerIndex];
+        await BroadcastStandupPerClient(room, state, speaker.ConnectionId);
 
-        // Broadcast flipped state to everyone (waiting players now see timer starting)
-        await hubContext.Clients.GroupExcept(room.RoomCode, speaker.ConnectionId)
-            .ReceiveGameState(GameHub.BuildStateDto(room, speaker.ConnectionId));
-        await hubContext.Clients.Client(speaker.ConnectionId)
-            .ReceiveGameState(GameHub.BuildStateDto(room, speaker.ConnectionId, cardText));
-
-        StartTurnTimer(room, TurnSeconds);
+        StartTurnTimer(room, state, TurnSeconds);
     }
 
     // ── Speaker controls ──────────────────────────────────────────────────────
 
-    public async Task EndTurnAsync(GameRoom room)
+    public async Task EndTurnAsync(GameRoom room, StandupRoomState state)
     {
         CancelTimer(_turnTimers, room.RoomCode);
         _pausedSeconds.Remove(room.RoomCode);
-        await TransitionToVotingAsync(room);
+        await TransitionToVotingAsync(room, state);
     }
 
-    public async Task<bool> PauseTurnAsync(GameRoom room)
+    public async Task<bool> PauseTurnAsync(GameRoom room, StandupRoomState state)
     {
-        if (_pausedSeconds.ContainsKey(room.RoomCode)) return false; // already paused
+        if (_pausedSeconds.ContainsKey(room.RoomCode)) return false;
         var remaining = _currentSeconds.GetValueOrDefault(room.RoomCode, 0);
         CancelTimer(_turnTimers, room.RoomCode);
         _pausedSeconds[room.RoomCode] = remaining;
@@ -107,11 +100,11 @@ public class GameTimerService(
         return true;
     }
 
-    public async Task<bool> ResumeTurnAsync(GameRoom room)
+    public async Task<bool> ResumeTurnAsync(GameRoom room, StandupRoomState state)
     {
         if (!_pausedSeconds.TryGetValue(room.RoomCode, out var remaining)) return false;
         _pausedSeconds.Remove(room.RoomCode);
-        StartTurnTimer(room, remaining);
+        StartTurnTimer(room, state, remaining);
         await hubContext.Clients.Group(room.RoomCode).ReceiveTimerTick(remaining);
         return true;
     }
@@ -120,29 +113,29 @@ public class GameTimerService(
 
     // ── Impressiveness voting ─────────────────────────────────────────────────
 
-    public async Task OnImpressivenessSubmittedAsync(GameRoom room)
+    public async Task OnImpressivenessSubmittedAsync(GameRoom room, StandupRoomState state)
     {
         var eligible = room.Players.Count(p => p.IsConnected) - 1;
-        var submitted = room.CurrentTurnImpressiveness.Count;
+        var submitted = state.CurrentTurnImpressiveness.Count;
 
         await hubContext.Clients.Group(room.RoomCode).ReceiveVoteCount(submitted, eligible);
 
         if (submitted >= eligible && eligible > 0)
         {
             CancelTimer(_voteTimers, room.RoomCode);
-            await TransitionToResultsAsync(room);
+            await TransitionToResultsAsync(room, state);
         }
     }
 
     // ── Results & advance ─────────────────────────────────────────────────────
 
-    public async Task TransitionToResultsAsync(GameRoom room)
+    public async Task TransitionToResultsAsync(GameRoom room, StandupRoomState state)
     {
         CancelTimer(_voteTimers, room.RoomCode);
-        var speaker = room.Players[room.CurrentSpeakerIndex];
+        var speaker = room.Players[state.CurrentSpeakerIndex];
         var cardText = _activeCardText.GetValueOrDefault(room.RoomCode, "");
 
-        var impressionValues = room.CurrentTurnImpressiveness.Values.ToList();
+        var impressionValues = state.CurrentTurnImpressiveness.Values.ToList();
         var impressionScore = impressionValues.Count > 0
             ? Math.Round(impressionValues.Average(), 1) : 0.0;
         var turnScore = (int)Math.Round(impressionScore * 10);
@@ -156,46 +149,105 @@ public class GameTimerService(
             TurnScore: turnScore
         );
 
-        room.Phase = GamePhase.Results;
+        state.SubPhase = StandupSubPhase.Results;
         room.LastActivity = DateTime.UtcNow;
 
-        await hubContext.Clients.Group(room.RoomCode)
-            .ReceiveGameState(GameHub.BuildStateDto(room, speaker.ConnectionId, cardText, lastTurnResult));
+        await BroadcastLean(room);
+        var dto = BuildStandupDto(state, speaker.ConnectionId, cardText, lastTurnResult);
+        var json = JsonSerializer.Serialize(dto);
+        await hubContext.Clients.Group(room.RoomCode).ReceiveGameSpecificState("standup", json);
     }
 
-    public async Task AdvanceToNextTurnAsync(GameRoom room)
+    public async Task AdvanceToNextTurnAsync(GameRoom room, StandupRoomState state)
     {
-        room.CurrentSpeakerIndex++;
+        state.CurrentSpeakerIndex++;
 
-        if (room.CurrentSpeakerIndex >= room.Players.Count)
+        if (state.CurrentSpeakerIndex >= room.Players.Count)
         {
             room.Phase = GamePhase.GameOver;
             room.LastActivity = DateTime.UtcNow;
-            await hubContext.Clients.Group(room.RoomCode).ReceiveGameState(GameHub.BuildStateDto(room));
+            await BroadcastLean(room);
             return;
         }
 
-        room.Phase = GamePhase.SpeakerTurn;
-        await StartTurnAsync(room);
+        await StartTurnAsync(room, state);
     }
 
-    // ── Transition to voting (called by EndTurn / timer expiry / skip) ────────
+    // ── Voting transition ─────────────────────────────────────────────────────
 
-    public async Task TransitionToVotingAsync(GameRoom room)
+    public async Task TransitionToVotingAsync(GameRoom room, StandupRoomState state)
     {
-        room.Phase = GamePhase.Voting;
+        state.SubPhase = StandupSubPhase.Voting;
         room.LastActivity = DateTime.UtcNow;
 
-        var speaker = room.Players[room.CurrentSpeakerIndex];
-        await hubContext.Clients.Group(room.RoomCode)
-            .ReceiveGameState(GameHub.BuildStateDto(room, speaker.ConnectionId));
+        var speaker = room.Players[state.CurrentSpeakerIndex];
+        await BroadcastLean(room);
+        var dto = BuildStandupDto(state, speaker.ConnectionId);
+        var json = JsonSerializer.Serialize(dto);
+        await hubContext.Clients.Group(room.RoomCode).ReceiveGameSpecificState("standup", json);
 
         var cts = new CancellationTokenSource();
         _voteTimers[room.RoomCode] = cts;
-        _ = RunVotingTimerAsync(room, VotingSeconds, cts.Token);
+        _ = RunVotingTimerAsync(room, state, VotingSeconds, cts.Token);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // ── DTO builder & broadcast helpers ──────────────────────────────────────
+
+    public static StandupGameStateDto BuildStandupDto(
+        StandupRoomState state,
+        string? activeSpeakerConnectionId = null,
+        string? promptCardText = null,
+        TurnResultDto? lastTurnResult = null)
+    {
+        var includeTranscript = state.SubPhase is StandupSubPhase.Voting or StandupSubPhase.Results;
+        return new StandupGameStateDto(
+            SubPhase: state.SubPhase,
+            ActivePlayerName: null, // resolved by caller if needed
+            SecondsRemaining: null,
+            PromptCardText: promptCardText,
+            VotesSubmitted: state.CurrentTurnImpressiveness.Count,
+            VotesTotal: 0, // caller sets this
+            LastTurnResult: lastTurnResult,
+            CardFlipped: state.CardFlipped,
+            LastTranscript: includeTranscript ? state.CurrentTranscript : null
+        );
+    }
+
+    private async Task BroadcastLean(GameRoom room)
+    {
+        var dto = new GameStateDto(room.Phase, room.RoomCode,
+            room.Players.Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected)).ToList(),
+            room.GameType);
+        await hubContext.Clients.Group(room.RoomCode).ReceiveGameState(dto);
+    }
+
+    /// Broadcasts standup-specific state per-client (speaker gets card text, others don't).
+    public async Task BroadcastStandupPerClient(GameRoom room, StandupRoomState state, string speakerConnectionId)
+    {
+        var cardText = _activeCardText.GetValueOrDefault(room.RoomCode, "");
+        var eligible = room.Players.Count(p => p.IsConnected) - 1;
+        var includeTranscript = state.SubPhase is StandupSubPhase.Voting or StandupSubPhase.Results;
+
+        foreach (var player in room.Players.Where(p => p.IsConnected))
+        {
+            var isSpeaker = player.ConnectionId == speakerConnectionId;
+            var dto = new StandupGameStateDto(
+                SubPhase: state.SubPhase,
+                ActivePlayerName: room.Players.FirstOrDefault(p => p.ConnectionId == speakerConnectionId)?.Name,
+                SecondsRemaining: null,
+                PromptCardText: isSpeaker ? cardText : null,
+                VotesSubmitted: state.CurrentTurnImpressiveness.Count,
+                VotesTotal: eligible,
+                LastTurnResult: null,
+                CardFlipped: state.CardFlipped,
+                LastTranscript: includeTranscript ? state.CurrentTranscript : null
+            );
+            await hubContext.Clients.Client(player.ConnectionId)
+                .ReceiveGameSpecificState("standup", JsonSerializer.Serialize(dto));
+        }
+    }
+
+    // ── Timer helpers ─────────────────────────────────────────────────────────
 
     public Task<string?> GetActiveCardTextAsync(string roomCode) =>
         Task.FromResult(_activeCardText.GetValueOrDefault(roomCode));
@@ -206,11 +258,11 @@ public class GameTimerService(
         CancelTimer(_voteTimers, roomCode);
     }
 
-    private void StartTurnTimer(GameRoom room, int seconds)
+    private void StartTurnTimer(GameRoom room, StandupRoomState state, int seconds)
     {
         var cts = new CancellationTokenSource();
         _turnTimers[room.RoomCode] = cts;
-        _ = RunTurnTimerAsync(room, seconds, cts.Token);
+        _ = RunTurnTimerAsync(room, state, seconds, cts.Token);
     }
 
     private static void CancelTimer(Dictionary<string, CancellationTokenSource> dict, string key)
@@ -223,7 +275,7 @@ public class GameTimerService(
         }
     }
 
-    private async Task RunTurnTimerAsync(GameRoom room, int seconds, CancellationToken ct)
+    private async Task RunTurnTimerAsync(GameRoom room, StandupRoomState state, int seconds, CancellationToken ct)
     {
         try
         {
@@ -237,13 +289,13 @@ public class GameTimerService(
                 await hubContext.Clients.Group(room.RoomCode).ReceiveTimerTick(remaining);
             }
             if (!ct.IsCancellationRequested)
-                await TransitionToVotingAsync(room);
+                await TransitionToVotingAsync(room, state);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { logger.LogError(ex, "Room {RoomCode}: turn timer error.", room.RoomCode); }
     }
 
-    private async Task RunVotingTimerAsync(GameRoom room, int seconds, CancellationToken ct)
+    private async Task RunVotingTimerAsync(GameRoom room, StandupRoomState state, int seconds, CancellationToken ct)
     {
         try
         {
@@ -251,11 +303,10 @@ public class GameTimerService(
             if (!ct.IsCancellationRequested)
             {
                 logger.LogInformation("Room {RoomCode}: impressiveness voting window expired.", room.RoomCode);
-                await TransitionToResultsAsync(room);
+                await TransitionToResultsAsync(room, state);
             }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { logger.LogError(ex, "Room {RoomCode}: voting timer error.", room.RoomCode); }
     }
-
 }

@@ -9,7 +9,6 @@ namespace StandupAndDeliver.Hubs;
 
 public class GameHub(
     GameRoomService gameRoomService,
-    GameTimerService gameTimerService,
     EventLogService eventLog,
     IEnumerable<ICardGame> cardGames) : Hub<IGameClient>
 {
@@ -21,13 +20,13 @@ public class GameHub(
         if (string.IsNullOrWhiteSpace(playerName))
             return new HubResult(false, "Player name is required.");
 
-        var validTypes = new[] { "standup", "OneO" };
-        if (!validTypes.Contains(gameType)) gameType = "standup";
+        var validTypes = cardGames.Select(g => g.GameType).ToArray();
+        if (!validTypes.Contains(gameType)) gameType = validTypes.FirstOrDefault() ?? "standup";
 
         var safeName = WebUtility.HtmlEncode(playerName.Trim());
         var (room, code) = gameRoomService.CreateRoom(safeName, Context.ConnectionId, gameType);
         await Groups.AddToGroupAsync(Context.ConnectionId, code);
-        await Clients.Caller.ReceiveGameState(BuildStateDto(room));
+        await Clients.Caller.ReceiveGameState(BuildLeanDto(room));
         _ = eventLog.LogAsync("RoomCreated", gameType, code, safeName, 1);
         return new HubResult(true);
     }
@@ -42,7 +41,7 @@ public class GameHub(
         if (!result.Success) return result;
 
         await Groups.AddToGroupAsync(Context.ConnectionId, room!.RoomCode);
-        await Clients.Group(room.RoomCode).ReceiveGameState(BuildStateDto(room));
+        await Clients.Group(room.RoomCode).ReceiveGameState(BuildLeanDto(room));
         _ = eventLog.LogAsync("PlayerJoined", room.GameType, room.RoomCode, safeName, room.Players.Count);
         return new HubResult(true);
     }
@@ -63,25 +62,12 @@ public class GameHub(
 
         await Groups.AddToGroupAsync(Context.ConnectionId, room.RoomCode);
 
-        if (room.GameType == "OneO")
-        {
-            await Clients.Caller.ReceiveGameState(BuildStateDto(room));
-        }
-        else
-        {
-            var activeSpeaker = room.Phase == GamePhase.SpeakerTurn
-                ? room.Players[room.CurrentSpeakerIndex] : null;
-            var isActiveSpeaker = activeSpeaker?.ConnectionId == Context.ConnectionId;
-            var cardText = isActiveSpeaker
-                ? await gameTimerService.GetActiveCardTextAsync(room.RoomCode) : null;
+        // Send lean platform state to all (player list changed — reconnected)
+        await Clients.Group(room.RoomCode).ReceiveGameState(BuildLeanDto(room));
 
-            if (room.Phase is GamePhase.Results)
-                cardText = await gameTimerService.GetActiveCardTextAsync(room.RoomCode);
-
-            await Clients.Caller.ReceiveGameState(BuildStateDto(room, activeSpeaker?.ConnectionId, cardText));
-            await Clients.GroupExcept(room.RoomCode, Context.ConnectionId)
-                .ReceiveGameState(BuildStateDto(room, activeSpeaker?.ConnectionId));
-        }
+        // Delegate game-specific rejoin logic to the game implementation
+        var game = GetGame(room.GameType);
+        await game.OnPlayerRejoined(room, Context.ConnectionId);
 
         return new HubResult(true);
     }
@@ -95,8 +81,7 @@ public class GameHub(
         var (updatedRoom, result) = gameRoomService.StartGame(room.RoomCode, Context.ConnectionId);
         if (!result.Success)
         {
-            // Sync the caller so their UI reflects the actual game phase instead of staying on lobby.
-            await Clients.Caller.ReceiveGameState(BuildStateDto(room));
+            await Clients.Caller.ReceiveGameState(BuildLeanDto(room));
             return result;
         }
 
@@ -130,19 +115,14 @@ public class GameHub(
 
                 var roomCode = room.RoomCode;
                 var playerName = player.Name;
-                var wasActiveSpeaker = room.GameType == "standup"
-                    && room.Phase == GamePhase.SpeakerTurn
-                    && room.Players[room.CurrentSpeakerIndex].Name == playerName;
                 var wasHost = player.IsHost;
 
                 gameRoomService.StartGracePeriod(roomCode, playerName, async () =>
                 {
                     var r = gameRoomService.GetRoom(roomCode);
                     if (r is null) return;
-                    if (wasActiveSpeaker && r.Phase == GamePhase.SpeakerTurn)
-                        await gameTimerService.EndTurnAsync(r);
-                    else if (wasHost && r.Phase == GamePhase.Results)
-                        await gameTimerService.AdvanceToNextTurnAsync(r);
+                    var g = GetGame(r.GameType);
+                    await g.OnPlayerGraceExpired(r, playerName, wasHost);
                 });
 
                 break;
@@ -157,36 +137,8 @@ public class GameHub(
         gameRoomService.GetAllRooms()
             .FirstOrDefault(r => r.Players.Any(p => p.ConnectionId == Context.ConnectionId));
 
-    public static GameStateDto BuildStateDto(
-        GameRoom room,
-        string? activeSpeakerConnectionId = null,
-        string? promptCardText = null,
-        TurnResultDto? lastTurnResult = null)
-    {
-        var players = room.Players
-            .Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected))
-            .ToList();
-
-        var activeSpeaker = activeSpeakerConnectionId is not null
-            ? room.Players.FirstOrDefault(p => p.ConnectionId == activeSpeakerConnectionId)
-            : null;
-
-        var includeTranscript = room.Phase is GamePhase.Voting or GamePhase.Results;
-
-        return new GameStateDto(
-            Phase: room.Phase,
-            RoomCode: room.RoomCode,
-            Players: players,
-            ActivePlayerName: activeSpeaker?.Name,
-            SecondsRemaining: null,
-            PromptCardText: promptCardText,
-            VotesSubmitted: room.CurrentTurnImpressiveness.Count,
-            VotesTotal: room.Players.Count(p => p.IsConnected) - 1,
-            LastTurnResult: lastTurnResult,
-            CardFlipped: room.CardFlipped,
-            LastTranscript: includeTranscript ? room.CurrentTranscript : null,
-            GameType: room.GameType
-        );
-    }
+    public static GameStateDto BuildLeanDto(GameRoom room) =>
+        new(room.Phase, room.RoomCode,
+            room.Players.Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected)).ToList(),
+            room.GameType);
 }
-

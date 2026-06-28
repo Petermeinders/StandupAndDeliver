@@ -1,5 +1,9 @@
-﻿@inject GameStateService GameState
+@inject GameStateService GameState
 @inject IJSRuntime JS
+
+@{
+    var oneOState = GameState.GetState<OneOGameStateDto>("OneO");
+}
 
 <div class="bg-gray-900 rounded-2xl p-6 flex flex-col items-center gap-4">
 
@@ -11,14 +15,14 @@
                     class="w-16 h-24 rounded-xl border-2 flex items-center justify-center text-2xl font-bold transition-all
                            @(IsMyTurn ? "border-blue-400 hover:scale-105 cursor-pointer shadow-lg" : "border-gray-700 cursor-not-allowed opacity-60")">
             </button>
-            <span class="text-xs text-gray-500">@(GameState.OneOState?.DrawPileCount ?? 0) left</span>
+            <span class="text-xs text-gray-500">@(oneOState?.DrawPileCount ?? 0) left</span>
         </div>
 
         <div class="flex flex-col items-center gap-2">
-            @if (GameState.OneOState?.TopDiscard is { } top)
+            @if (oneOState?.TopDiscard is { } top)
             {
                 <div class="w-16 h-24 rounded-xl border-2 flex flex-col items-center justify-center relative
-                            @CardBorderColor(GameState.OneOState.CurrentColor)"
+                            @CardBorderColor(oneOState.CurrentColor)"
                      style="@OneOHand.CardBgStyle(top.Color)">
                     <span class="absolute top-1 left-1.5 text-[9px] font-bold text-white/70 leading-none">@CardLabel(top)</span>
                     <span class="text-3xl font-black text-white drop-shadow">@CardLabel(top)</span>
@@ -26,7 +30,7 @@
                 </div>
             }
             <span class="text-xs text-gray-500">
-                Current: <span class="font-bold @ColorTextClass(GameState.OneOState?.CurrentColor ?? "")">@(GameState.OneOState?.CurrentColor ?? "")</span>
+                Current: <span class="font-bold @ColorTextClass(oneOState?.CurrentColor ?? "")">@(oneOState?.CurrentColor ?? "")</span>
             </span>
         </div>
     </div>
@@ -38,7 +42,7 @@
         }
         else
         {
-            <p class="text-gray-400">Waiting for <span class="text-white font-semibold">@(GameState.OneOState?.CurrentPlayerName)</span>…</p>
+            <p class="text-gray-400">Waiting for <span class="text-white font-semibold">@(oneOState?.CurrentPlayerName)</span>…</p>
         }
     </div>
 </div>
@@ -46,7 +50,7 @@
 @code {
     [Parameter] public required Func<string, string?, Task<HubResult>> GameActionFunc { get; set; }
 
-    private bool IsMyTurn => GameState.OneOState?.CurrentPlayerName == GameState.PlayerName;
+    private bool IsMyTurn => GameState.GetState<OneOGameStateDto>("OneO")?.CurrentPlayerName == GameState.PlayerName;
 
     private async Task OnDrawCard()
     {

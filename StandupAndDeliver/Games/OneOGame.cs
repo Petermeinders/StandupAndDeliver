@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.AspNetCore.SignalR;
 using StandupAndDeliver.Hubs;
@@ -60,7 +60,6 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext) : ICardGame
 
         state.LastAction = $"Game started! {room.Players[state.CurrentPlayerIndex].Name} goes first.";
         _states[room.RoomCode] = state;
-        room.Phase = GamePhase.Playing;
 
         await BroadcastState(room, state);
     }
@@ -79,6 +78,29 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext) : ICardGame
     }
 
     public Task OnPlayerDisconnected(GameRoom room, string connectionId) => Task.CompletedTask;
+
+    public async Task OnPlayerRejoined(GameRoom room, string connectionId)
+    {
+        if (!_states.TryGetValue(room.RoomCode, out var state)) return;
+        // Re-broadcast lean state + game-specific state to the rejoining player
+        var lean = new GameStateDto(room.Phase, room.RoomCode,
+            room.Players.Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected)).ToList(),
+            room.GameType);
+        await hubContext.Clients.Client(connectionId).ReceiveGameState(lean);
+
+        var player = room.Players.FirstOrDefault(p => p.ConnectionId == connectionId);
+        if (player is null) return;
+        var myHand = state.PlayerHands.TryGetValue(player.Name, out var hand)
+            ? (IReadOnlyList<OneOCardDto>)hand.Select(ToDto).ToList()
+            : Array.Empty<OneOCardDto>();
+        var dto = BuildDto(room, state, myHand);
+        await hubContext.Clients.Client(connectionId)
+            .ReceiveGameSpecificState("OneO", JsonSerializer.Serialize(dto));
+    }
+
+    public Task OnPlayerGraceExpired(GameRoom room, string playerName, bool wasHost) => Task.CompletedTask;
+
+    // ── Game actions ──────────────────────────────────────────────────────────
 
     private async Task<HubResult> PlayCard(GameRoom room, OneOGameState state, string connectionId, string? payloadJson)
     {
@@ -127,7 +149,6 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext) : ICardGame
             room.Phase = GamePhase.GameOver;
             state.LastAction = $"{currentPlayer.Name} wins!";
             await BroadcastState(room, state);
-            await hubContext.Clients.Group(room.RoomCode).ReceiveGameState(GameHub.BuildStateDto(room));
             return new HubResult(true);
         }
 
@@ -195,18 +216,33 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext) : ICardGame
         return new HubResult(true);
     }
 
+    // ── Broadcast ─────────────────────────────────────────────────────────────
+
     private async Task BroadcastState(GameRoom room, OneOGameState state)
     {
-        // Keep GameState.State.Phase in sync so GameRoom.razor switches away from LobbyView.
-        await hubContext.Clients.Group(room.RoomCode).ReceiveGameState(GameHub.BuildStateDto(room));
+        var lean = new GameStateDto(room.Phase, room.RoomCode,
+            room.Players.Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected)).ToList(),
+            room.GameType);
+        await hubContext.Clients.Group(room.RoomCode).ReceiveGameState(lean);
 
+        foreach (var player in room.Players.Where(p => p.IsConnected))
+        {
+            var myHand = state.PlayerHands.TryGetValue(player.Name, out var hand)
+                ? (IReadOnlyList<OneOCardDto>)hand.Select(ToDto).ToList()
+                : Array.Empty<OneOCardDto>();
+            var dto = BuildDto(room, state, myHand);
+            await hubContext.Clients.Client(player.ConnectionId)
+                .ReceiveGameSpecificState("OneO", JsonSerializer.Serialize(dto));
+        }
+    }
+
+    private static OneOGameStateDto BuildDto(GameRoom room, OneOGameState state, IReadOnlyList<OneOCardDto> myHand)
+    {
         var players = room.Players
             .Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected))
             .ToList();
-
         var handCounts = (IReadOnlyDictionary<string, int>)room.Players
             .ToDictionary(p => p.Name, p => state.PlayerHands.TryGetValue(p.Name, out var h) ? h.Count : 0);
-
         var topDiscard = state.DiscardPile.Count > 0 ? ToDto(state.DiscardPile.Last()) : null;
         var currentPlayerName = room.Players.Count > 0 ? room.Players[state.CurrentPlayerIndex].Name : "";
         var phaseStr = room.Phase switch
@@ -216,30 +252,23 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext) : ICardGame
             _ => "Lobby"
         };
 
-        foreach (var player in room.Players.Where(p => p.IsConnected))
-        {
-            var myHand = state.PlayerHands.TryGetValue(player.Name, out var hand)
-                ? (IReadOnlyList<OneOCardDto>)hand.Select(ToDto).ToList()
-                : Array.Empty<OneOCardDto>();
-
-            var dto = new OneOGameStateDto(
-                Phase: phaseStr,
-                RoomCode: room.RoomCode,
-                Players: players,
-                MyHand: myHand,
-                TopDiscard: topDiscard,
-                CurrentColor: state.CurrentColor.ToString(),
-                CurrentPlayerName: currentPlayerName,
-                DrawPileCount: state.DrawPile.Count,
-                PlayerHandCounts: handCounts,
-                Clockwise: state.Clockwise,
-                LastAction: state.LastAction,
-                WinnerName: state.WinnerName
-            );
-
-            await hubContext.Clients.Client(player.ConnectionId).ReceiveOneOGameState(dto);
-        }
+        return new OneOGameStateDto(
+            Phase: phaseStr,
+            RoomCode: room.RoomCode,
+            Players: players,
+            MyHand: myHand,
+            TopDiscard: topDiscard,
+            CurrentColor: state.CurrentColor.ToString(),
+            CurrentPlayerName: currentPlayerName,
+            DrawPileCount: state.DrawPile.Count,
+            PlayerHandCounts: handCounts,
+            Clockwise: state.Clockwise,
+            LastAction: state.LastAction,
+            WinnerName: state.WinnerName
+        );
     }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static int NextPlayerIndex(OneOGameState state, int playerCount, int? from = null)
     {

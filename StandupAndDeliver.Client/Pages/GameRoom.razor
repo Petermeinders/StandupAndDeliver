@@ -1,6 +1,7 @@
 @page "/room"
 @rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
 @inject GameStateService GameState
+@inject GameRegistry Registry
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject SavedSessionService SavedSession
@@ -59,81 +60,33 @@ else if (!string.IsNullOrEmpty(_fatalError))
         </button>
     </div>
 }
-else if (GameState.State?.GameType == "OneO")
+else if (GameState.PlatformState?.Phase == GamePhase.Lobby)
 {
-    @switch (GameState.State?.Phase)
+    <div @key="GamePhase.Lobby" class="screen-fade">
+        <LobbyView OnStart="StateHasChanged" StartGameFunc="StartGame" />
+    </div>
+}
+else if (GameState.PlatformState is { } platform)
+{
+    var gameCompType = Registry.GetComponent(platform.GameType);
+    @if (gameCompType is not null)
     {
-        case GamePhase.Lobby:
-            <div @key="GamePhase.Lobby" class="screen-fade">
-                <LobbyView OnStart="StateHasChanged" StartGameFunc="StartGame" />
-            </div>
-            break;
-
-        case GamePhase.Playing:
-        case GamePhase.GameOver:
-            <div @key="@GameState.State.Phase" class="screen-fade">
-                <OneOGameRoot GameActionFunc="GameAction" />
-            </div>
-            break;
-
-        default:
-            <div class="min-h-screen text-white flex items-center justify-center">
-                <p class="text-gray-400">Loading…</p>
-            </div>
-            break;
+        <div @key="@platform.GameType" class="screen-fade">
+            <DynamicComponent Type="gameCompType" Parameters="_gameParams" />
+        </div>
+    }
+    else
+    {
+        <div class="min-h-screen text-white flex items-center justify-center">
+            <p class="text-gray-400">Unknown game type: @platform.GameType</p>
+        </div>
     }
 }
 else
 {
-    @switch (GameState.State?.Phase)
-    {
-        case GamePhase.Lobby:
-            <div @key="GamePhase.Lobby" class="screen-fade">
-                <LobbyView OnStart="StateHasChanged" StartGameFunc="StartGame" />
-            </div>
-            break;
-
-        case GamePhase.SpeakerTurn:
-            @if (GameState.State?.ActivePlayerName == GameState.PlayerName)
-            {
-                <div @key="@((GamePhase.SpeakerTurn, "speaker"))" class="screen-fade">
-                    <SpeakerView EndTurnFunc="EndTurn" PauseTurnFunc="PauseTurn"
-                                 ResumeTurnFunc="ResumeTurn" SkipTurnFunc="SkipTurn"
-                                 FlipCardFunc="FlipCard" SendTranscriptFunc="SendTranscript" />
-                </div>
-            }
-            else
-            {
-                <div @key="@((GamePhase.SpeakerTurn, "waiting"))" class="screen-fade">
-                    <WaitingView SkipTurnFunc="SkipTurn" SendReactionFunc="SendReaction" />
-                </div>
-            }
-            break;
-
-        case GamePhase.Voting:
-            <div @key="GamePhase.Voting" class="screen-fade">
-                <VotingView SubmitImpressivenessFunc="SubmitImpressiveness" />
-            </div>
-            break;
-
-        case GamePhase.Results:
-            <div @key="GamePhase.Results" class="screen-fade">
-                <ResultsView AdvanceTurnFunc="AdvanceTurn" />
-            </div>
-            break;
-
-        case GamePhase.GameOver:
-            <div @key="GamePhase.GameOver" class="screen-fade">
-                <GameOverView />
-            </div>
-            break;
-
-        default:
-            <div class="min-h-screen text-white flex items-center justify-center">
-                <p class="text-gray-400">Phase: @GameState.State?.Phase</p>
-            </div>
-            break;
-    }
+    <div class="min-h-screen text-white flex items-center justify-center">
+        <p class="text-gray-400">Loading…</p>
+    </div>
 }
 
 @code {
@@ -152,6 +105,8 @@ else
     private string? _rejoinError;
     private string? _fatalError;
 
+    private Dictionary<string, object> _gameParams = [];
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
@@ -165,6 +120,11 @@ else
             return;
         }
 
+        _gameParams = new Dictionary<string, object>
+        {
+            ["GameActionFunc"] = (Func<string, string?, Task<HubResult>>)GameAction
+        };
+
         _hub = new HubConnectionBuilder()
             .WithUrl(Nav.ToAbsoluteUri("/gamehub"), options =>
             {
@@ -177,8 +137,8 @@ else
         _hub.Reconnected += async _ =>
         {
             _reconnecting = false;
-            if (GameState.State is not null && GameState.PlayerName is not null)
-                await _hub.InvokeAsync<HubResult>("RejoinRoom", GameState.State.RoomCode, GameState.PlayerName);
+            if (GameState.PlatformState is not null && GameState.PlayerName is not null)
+                await _hub.InvokeAsync<HubResult>("RejoinRoom", GameState.PlatformState.RoomCode, GameState.PlayerName);
             await InvokeAsync(StateHasChanged);
         };
 
@@ -188,26 +148,29 @@ else
             return InvokeAsync(StateHasChanged);
         };
 
-        // All automatic retries exhausted — show an explicit reconnect UI so the player
-        // doesn't get silently stuck on a stale screen.
         _hub.Closed += _ =>
         {
             _reconnecting = false;
             _hubClosed = true;
-            _closedRoomCode = GameState.State?.RoomCode;
+            _closedRoomCode = GameState.PlatformState?.RoomCode;
             _closedPlayerName = GameState.PlayerName;
             return InvokeAsync(StateHasChanged);
         };
 
         _hub.On<GameStateDto>("ReceiveGameState", async state =>
         {
-            GameState.Update(state);
-            // Persist session so it can be restored from the home screen after a full page reload.
+            GameState.UpdatePlatform(state);
             if (state.Phase == GamePhase.GameOver)
                 await SavedSession.ClearAsync();
             else if (state.RoomCode is not null && GameState.PlayerName is not null)
                 await SavedSession.SaveAsync(state.RoomCode, GameState.PlayerName);
             await InvokeAsync(StateHasChanged);
+        });
+
+        _hub.On<string, string>("ReceiveGameSpecificState", (gameType, json) =>
+        {
+            GameState.UpdateGameState(gameType, json);
+            InvokeAsync(StateHasChanged);
         });
 
         _hub.On<int>("ReceiveTimerTick", seconds =>
@@ -234,9 +197,16 @@ else
             InvokeAsync(StateHasChanged);
         });
 
-        _hub.On<OneOGameStateDto>("ReceiveOneOGameState", state =>
+        _hub.On<GamePhase>("ReceivePhaseChange", phase =>
         {
-            GameState.UpdateOneO(state);
+            if (GameState.PlatformState is not null)
+                GameState.UpdatePlatform(GameState.PlatformState with { Phase = phase });
+            InvokeAsync(StateHasChanged);
+        });
+
+        _hub.On<string>("ReceiveError", error =>
+        {
+            Console.Error.WriteLine($"[Hub error] {error}");
             InvokeAsync(StateHasChanged);
         });
 
@@ -291,22 +261,6 @@ else
 
     private async Task<HubResult> GameAction(string action, string? payload = null) =>
         _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("GameAction", action, payload);
-
-    private async Task<HubResult> FlipCard() => await GameAction("FlipCard");
-    private async Task<HubResult> EndTurn() => await GameAction("EndTurn");
-    private async Task<HubResult> PauseTurn() => await GameAction("PauseTurn");
-    private async Task<HubResult> ResumeTurn() => await GameAction("ResumeTurn");
-    private async Task<HubResult> SkipTurn() => await GameAction("SkipTurn");
-    private async Task<HubResult> AdvanceTurn() => await GameAction("AdvanceTurn");
-
-    private async Task<HubResult> SubmitImpressiveness(int rating) =>
-        await GameAction("SubmitImpressiveness", $"{{\"rating\":{rating}}}");
-
-    private async Task SendReaction(string emoji) =>
-        await GameAction("SendReaction", $"{{\"emoji\":\"{emoji}\"}}");
-
-    private async Task SendTranscript(string text) =>
-        await GameAction("SendTranscript", System.Text.Json.JsonSerializer.Serialize(new { text }));
 
     private async Task TryRejoinAsync()
     {

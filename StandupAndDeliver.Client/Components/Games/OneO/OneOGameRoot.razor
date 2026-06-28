@@ -1,26 +1,30 @@
-﻿@inject GameStateService GameState
+@inject GameStateService GameState
 @inject IJSRuntime JS
+
+@{
+    var oneOState = GameState.GetState<OneOGameStateDto>("OneO");
+}
 
 <div class="min-h-screen text-white flex flex-col p-4 max-w-2xl mx-auto">
 
-    @if (GameState.OneOState is null)
+    @if (oneOState is null)
     {
         <div class="flex items-center justify-center flex-1">
             <p class="text-gray-400">Waiting for game state…</p>
         </div>
     }
-    else if (GameState.OneOState.Phase == "GameOver")
+    else if (oneOState.Phase == "GameOver")
     {
         <div class="flex flex-col items-center justify-center flex-1 gap-6">
             <div class="text-6xl">🎉</div>
-            <h2 class="text-3xl font-bold text-yellow-400">@GameState.OneOState.WinnerName wins!</h2>
+            <h2 class="text-3xl font-bold text-yellow-400">@oneOState.WinnerName wins!</h2>
             <p class="text-gray-400">Game over</p>
             <div class="bg-gray-900 rounded-2xl p-5 w-full max-w-sm">
                 <h3 class="text-gray-400 text-sm font-semibold uppercase tracking-widest mb-3">Final Hand Counts</h3>
-                @foreach (var kvp in GameState.OneOState.PlayerHandCounts.OrderBy(k => k.Value))
+                @foreach (var kvp in oneOState.PlayerHandCounts.OrderBy(k => k.Value))
                 {
                     <div class="flex justify-between py-1">
-                        <span class="@(kvp.Key == GameState.OneOState.WinnerName ? "text-yellow-400 font-bold" : "text-gray-300")">@kvp.Key</span>
+                        <span class="@(kvp.Key == oneOState.WinnerName ? "text-yellow-400 font-bold" : "text-gray-300")">@kvp.Key</span>
                         <span class="text-gray-500">@kvp.Value cards</span>
                     </div>
                 }
@@ -32,19 +36,19 @@
     {
         <div class="flex flex-col gap-4 flex-1">
             <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 font-mono">@GameState.OneOState.RoomCode</span>
-                <span class="text-xs @(GameState.OneOState.Clockwise ? "text-blue-400" : "text-orange-400")">
-                    @(GameState.OneOState.Clockwise ? "▶ Clockwise" : "◀ Counter-clockwise")
+                <span class="text-xs text-gray-500 font-mono">@oneOState.RoomCode</span>
+                <span class="text-xs @(oneOState.Clockwise ? "text-blue-400" : "text-orange-400")">
+                    @(oneOState.Clockwise ? "▶ Clockwise" : "◀ Counter-clockwise")
                 </span>
                 <LeaveGameButton />
             </div>
 
             <div class="flex gap-2 flex-wrap">
-                @foreach (var player in GameState.OneOState.Players)
+                @foreach (var player in oneOState.Players)
                 {
-                    var isCurrentPlayer = player.Name == GameState.OneOState.CurrentPlayerName;
+                    var isCurrentPlayer = player.Name == oneOState.CurrentPlayerName;
                     var isMe = player.Name == GameState.PlayerName;
-                    var count = GameState.OneOState.PlayerHandCounts.TryGetValue(player.Name, out var c) ? c : 0;
+                    var count = oneOState.PlayerHandCounts.TryGetValue(player.Name, out var c) ? c : 0;
                     if (!isMe)
                     {
                         <div class="bg-gray-900 rounded-xl px-3 py-2 text-sm @(isCurrentPlayer ? "border border-yellow-400" : "border border-gray-700")">
@@ -59,9 +63,9 @@
 
             <OneOHand GameActionFunc="GameActionFunc" />
 
-            @if (!string.IsNullOrEmpty(GameState.OneOState.LastAction))
+            @if (!string.IsNullOrEmpty(oneOState.LastAction))
             {
-                <p class="text-center text-gray-500 text-sm italic">@GameState.OneOState.LastAction</p>
+                <p class="text-center text-gray-500 text-sm italic">@oneOState.LastAction</p>
             }
         </div>
     }
@@ -74,7 +78,7 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (GameState.OneOState?.Phase == "GameOver" && !_gameOverSoundPlayed)
+        if (GameState.GetState<OneOGameStateDto>("OneO")?.Phase == "GameOver" && !_gameOverSoundPlayed)
         {
             _gameOverSoundPlayed = true;
             await JS.InvokeVoidAsync("gameInterop.playSound", "levelup");

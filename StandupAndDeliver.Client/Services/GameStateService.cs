@@ -1,3 +1,4 @@
+using System.Text.Json;
 using StandupAndDeliver.Shared;
 
 namespace StandupAndDeliver.Client.Services;
@@ -6,41 +7,32 @@ public record ReactionItem(string PlayerName, string Emoji, DateTime ReceivedAt)
 
 public class GameStateService
 {
-    public GameStateDto? State { get; private set; }
-    public OneOGameStateDto? OneOState { get; private set; }
+    public GameStateDto? PlatformState { get; private set; }
     public string? PlayerName { get; set; }
     public string SelectedGameType { get; set; } = "standup";
     public int SecondsRemaining { get; private set; }
 
+    private readonly Dictionary<string, string> _gameStates = new();
     private readonly List<ReactionItem> _reactions = [];
 
     public string CurrentTranscript { get; private set; } = "";
     public event Action? OnTranscriptUpdated;
 
-    public void Update(GameStateDto state)
+    public void UpdatePlatform(GameStateDto state)
     {
-        // Pull transcript from state when entering Voting/Results (includes speaker's own view)
-        if (state.LastTranscript is not null)
-            CurrentTranscript = state.LastTranscript;
-        // Clear when a new speaker turn begins
-        else if (state.Phase == GamePhase.SpeakerTurn && State?.Phase != GamePhase.SpeakerTurn)
-            CurrentTranscript = "";
+        PlatformState = state;
+    }
 
-        // Preserve card text if the same speaker is still active and the incoming state has none.
-        // This guards against a server broadcast that omits card text (e.g. when another player
-        // disconnects) wiping the active speaker's prompt mid-turn.
-        if (state.Phase == GamePhase.SpeakerTurn
-            && state.PromptCardText is null
-            && State?.Phase == GamePhase.SpeakerTurn
-            && State.ActivePlayerName == state.ActivePlayerName
-            && State.PromptCardText is not null)
-        {
-            state = state with { PromptCardText = State.PromptCardText };
-        }
+    public void UpdateGameState(string gameType, string json)
+    {
+        _gameStates[gameType] = json;
+    }
 
-        State = state;
-        if (state.SecondsRemaining.HasValue)
-            SecondsRemaining = state.SecondsRemaining.Value;
+    public T? GetState<T>(string gameType) where T : class
+    {
+        if (!_gameStates.TryGetValue(gameType, out var json)) return null;
+        try { return JsonSerializer.Deserialize<T>(json); }
+        catch { return null; }
     }
 
     public void UpdateTranscript(string text)
@@ -53,8 +45,15 @@ public class GameStateService
 
     public void UpdateVoteCount(int submitted, int total)
     {
-        if (State is null) return;
-        State = State with { VotesSubmitted = submitted, VotesTotal = total };
+        if (!_gameStates.TryGetValue("standup", out var json)) return;
+        try
+        {
+            var dto = JsonSerializer.Deserialize<StandupGameStateDto>(json);
+            if (dto is null) return;
+            var updated = dto with { VotesSubmitted = submitted, VotesTotal = total };
+            _gameStates["standup"] = JsonSerializer.Serialize(updated);
+        }
+        catch { }
     }
 
     public void AddReaction(string playerName, string emoji)
@@ -71,12 +70,10 @@ public class GameStateService
         return _reactions.AsReadOnly();
     }
 
-    public void UpdateOneO(OneOGameStateDto state) => OneOState = state;
-
     public void Clear()
     {
-        State = null;
-        OneOState = null;
+        PlatformState = null;
+        _gameStates.Clear();
         PlayerName = null;
         SecondsRemaining = 0;
         CurrentTranscript = "";
