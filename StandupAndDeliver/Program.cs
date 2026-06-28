@@ -47,7 +47,7 @@ var app = builder.Build();
 
 await using (var db = app.Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext())
 {
-    await db.Database.EnsureCreatedAsync();
+    await DatabaseInitializer.InitializeAsync(db);
     await SeedData.SeedAsync(db);
 }
 

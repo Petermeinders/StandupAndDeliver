@@ -1,20 +1,20 @@
 @if (GameId == "standup")
 {
-    <GameReferenceAccordions HowToPlayDefaultOpen="false" ExampleDefaultOpen="false" />
+    <GameReferenceAccordions HowToPlayDefaultOpen="@HowToPlayDefaultOpen" ExampleDefaultOpen="@ExampleDefaultOpen" />
 }
 else if (GameId == "OneO")
 {
-    <div class="bg-gray-900 rounded-2xl mb-3 overflow-hidden">
-        <button @onclick="() => _open = !_open"
+    <div class="bg-gray-900 bg-opacity-80 rounded-2xl mb-3 overflow-hidden">
+        <button @onclick="() => _howToPlayOpen = !_howToPlayOpen"
                 class="w-full flex items-center justify-between px-6 py-4 text-left">
             <span class="font-semibold text-yellow-400">How to play</span>
-            <span class="text-gray-500 text-lg transition-transform @(_open ? "rotate-180" : "")">▾</span>
+            <span class="text-gray-500 text-lg transition-transform @(_howToPlayOpen ? "rotate-180" : "")">▾</span>
         </button>
-        @if (_open)
+        @if (_howToPlayOpen)
         {
             <div class="px-6 pb-5 text-sm text-gray-400 space-y-3 border-t border-gray-800 pt-4">
-                <p>Each player starts with <span class="text-gray-300 font-semibold">7 cards</span>. Match the top card of the discard pile by <span class="text-gray-300 font-semibold">color or number</span> to play a card from your hand.</p>
-                <p>If you can't play, <span class="text-gray-300 font-semibold">draw one card</span>. If the drawn card is playable, you may play it immediately — otherwise your turn passes.</p>
+                <p>Each player starts with <span class="text-gray-300 font-semibold">7 cards</span>. On your turn, play a card that matches the top of the discard pile by <span class="text-gray-300 font-semibold">color or number</span>.</p>
+                <p>If you can't play, <span class="text-gray-300 font-semibold">draw one card</span>. If the drawn card is playable, you may play it immediately — otherwise your turn ends.</p>
                 <div class="space-y-1 text-xs">
                     <p class="text-gray-500 font-semibold uppercase tracking-wider mb-2">Special cards</p>
                     <p><span class="text-white font-semibold">Skip</span> — the next player loses their turn.</p>
@@ -23,7 +23,37 @@ else if (GameId == "OneO")
                     <p><span class="text-white font-semibold">Wild</span> — play on anything; you choose the next color.</p>
                     <p><span class="text-white font-semibold">Wild Draw Four</span> — next player draws 4 and is skipped; you choose the color.</p>
                 </div>
-                <p class="text-gray-500 text-xs">First player to empty their hand wins.</p>
+                <p class="text-gray-500 text-xs">First player to empty their hand wins the round.</p>
+            </div>
+        }
+    </div>
+
+    <div class="bg-gray-900 bg-opacity-80 rounded-2xl mb-3 overflow-hidden">
+        <button @onclick="() => _exampleOpen = !_exampleOpen"
+                class="w-full flex items-center justify-between px-6 py-4 text-left">
+            <span class="font-semibold text-gray-300">Example</span>
+            <span class="text-gray-500 text-lg transition-transform @(_exampleOpen ? "rotate-180" : "")">▾</span>
+        </button>
+        @if (_exampleOpen)
+        {
+            <div class="px-6 pb-5 text-sm text-gray-400 space-y-4 border-t border-gray-800 pt-4">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-1">Top of discard pile</p>
+                    <p class="text-gray-200">Red <span class="font-semibold">7</span></p>
+                </div>
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-widest text-green-400 mb-1">✓ Valid plays</p>
+                    <p class="text-gray-300">Any red card (e.g. Red 2), any 7 of another color (e.g. Blue 7), or a Wild / Wild Draw Four.</p>
+                </div>
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-widest text-red-400 mb-1">✗ Can't play</p>
+                    <p class="text-gray-300">Blue 3 — wrong color and wrong number. Draw one card instead.</p>
+                </div>
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-widest text-yellow-400 mb-1">Special example</p>
+                    <p class="text-gray-300">You play a Wild and call <span class="text-white font-semibold">Blue</span>. The next player must match blue or play another wild.</p>
+                </div>
+                <p class="text-gray-500 text-xs">Say "OneO" when you have one card left — or pay the price if you forget!</p>
             </div>
         }
     </div>
@@ -31,12 +61,12 @@ else if (GameId == "OneO")
 else if (GameId == "crypt-sweepers")
 {
     <div class="bg-gray-900 rounded-2xl mb-3 overflow-hidden">
-        <button @onclick="() => _open = !_open"
+        <button @onclick="() => _howToPlayOpen = !_howToPlayOpen"
                 class="w-full flex items-center justify-between px-6 py-4 text-left">
             <span class="font-semibold text-yellow-400">How to play</span>
-            <span class="text-gray-500 text-lg transition-transform @(_open ? "rotate-180" : "")">▾</span>
+            <span class="text-gray-500 text-lg transition-transform @(_howToPlayOpen ? "rotate-180" : "")">▾</span>
         </button>
-        @if (_open)
+        @if (_howToPlayOpen)
         {
             <div class="px-6 pb-5 text-sm text-gray-400 space-y-3 border-t border-gray-800 pt-4">
                 <p>A single-player dungeon crawler built on Minesweeper logic. Every tile you reveal is either <span class="text-gray-300 font-semibold">treasure or a trap</span> — use the numbers around you to figure out which is which before you step.</p>
@@ -49,8 +79,15 @@ else if (GameId == "crypt-sweepers")
 
 @code {
     [Parameter, EditorRequired] public string GameId { get; set; } = "";
+    [Parameter] public bool HowToPlayDefaultOpen { get; set; }
+    [Parameter] public bool ExampleDefaultOpen { get; set; }
 
-    private bool _open;
+    private bool _howToPlayOpen;
+    private bool _exampleOpen;
 
-    protected override void OnParametersSet() => _open = false;
+    protected override void OnParametersSet()
+    {
+        _howToPlayOpen = HowToPlayDefaultOpen;
+        _exampleOpen = ExampleDefaultOpen;
+    }
 }
