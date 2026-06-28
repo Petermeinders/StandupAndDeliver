@@ -1,4 +1,5 @@
 @inject GameStateService GameState
+@inject IJSRuntime JS
 
 <div class="min-h-screen text-white flex flex-col items-center justify-center p-6">
     <div class="w-full max-w-md">
@@ -73,10 +74,17 @@
         _nextLabel = speakerIndex >= state.Players.Count - 1 ? "See Final Results" : "Next Turn";
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await JS.InvokeVoidAsync("gameInterop.playSound", "gold");
+    }
+
     private async Task OnAdvance()
     {
         _advancing = true;
         _error = null;
+        await JS.InvokeVoidAsync("gameInterop.playSound", "confirm");
         var result = await AdvanceTurnFunc();
         if (!result.Success) _error = result.Error;
         _advancing = false;

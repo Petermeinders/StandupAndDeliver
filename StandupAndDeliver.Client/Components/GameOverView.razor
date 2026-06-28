@@ -1,6 +1,7 @@
 @inject GameStateService GameState
 @inject NavigationManager Nav
 @inject SavedSessionService SavedSession
+@inject IJSRuntime JS
 
 <div class="min-h-screen text-white flex flex-col items-center justify-center p-6">
     <div class="w-full max-w-md">
@@ -54,6 +55,12 @@
 </div>
 
 @code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await JS.InvokeVoidAsync("gameInterop.playSound", "levelup");
+    }
+
     private async Task GoHomeAsync()
     {
         await SavedSession.ClearAsync();

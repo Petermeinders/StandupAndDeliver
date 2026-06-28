@@ -1,4 +1,5 @@
 @inject GameStateService GameState
+@inject IJSRuntime JS
 
 <div class="min-h-screen text-white flex flex-col items-center justify-center p-6">
     <div class="w-full max-w-md">
@@ -45,7 +46,7 @@
                     @for (var i = 1; i <= 5; i++)
                     {
                         var score = i;
-                        <button @onclick="() => _impressiveness = score"
+                        <button @onclick="() => OnRatingSelect(score)"
                                 class="w-14 h-14 rounded-xl font-bold text-xl transition-all
                                        @(_impressiveness == score ? "bg-yellow-400 text-black" : "bg-gray-800 text-gray-400 hover:bg-gray-700")">
                             @score
@@ -91,11 +92,18 @@
         _isActiveSpeaker = GameState.State?.ActivePlayerName == GameState.PlayerName;
     }
 
+    private async Task OnRatingSelect(int score)
+    {
+        _impressiveness = score;
+        await JS.InvokeVoidAsync("gameInterop.playSound", "menu");
+    }
+
     private async Task OnSubmit()
     {
         if (_impressiveness is null) return;
         _submitting = true;
         _error = null;
+        await JS.InvokeVoidAsync("gameInterop.playSound", "confirm");
         var result = await SubmitImpressivenessFunc(_impressiveness.Value);
         if (result.Success) _submitted = true;
         else _error = result.Error;

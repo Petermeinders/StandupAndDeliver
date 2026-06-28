@@ -1,4 +1,5 @@
 @inject GameStateService GameState
+@inject IJSRuntime JS
 
 <div class="bg-gray-900 rounded-2xl p-4">
     <p class="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-3">Your Hand (@(GameState.OneOState?.MyHand.Count ?? 0) cards)</p>
@@ -73,11 +74,13 @@
 
         if (card.Type is "Wild" or "WildDrawFour")
         {
+            await JS.InvokeVoidAsync("gameInterop.playSound", "flip");
             _pendingWildCard = card;
             _showColorPicker = true;
             return;
         }
 
+        await JS.InvokeVoidAsync("gameInterop.playSound", "flip");
         var payload = System.Text.Json.JsonSerializer.Serialize(new { cardId = card.Id });
         await GameActionFunc("PlayCard", payload);
     }
@@ -85,6 +88,7 @@
     private async Task OnWildColorChosen(string color)
     {
         _showColorPicker = false;
+        await JS.InvokeVoidAsync("gameInterop.playSound", "spell");
         var payload = System.Text.Json.JsonSerializer.Serialize(new { cardId = _pendingWildCard!.Id, chosenColor = color });
         _pendingWildCard = null;
         await GameActionFunc("PlayCard", payload);

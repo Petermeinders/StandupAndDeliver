@@ -189,6 +189,7 @@
     {
         _flipping = true;
         _error = null;
+        await JS.InvokeVoidAsync("gameInterop.playSound", "flip");
         var result = await FlipCardFunc();
         if (result.Success)
             await StartMicAsync();
@@ -202,6 +203,7 @@
         await StopMicAsync();
         _ending = true;
         _error = null;
+        await JS.InvokeVoidAsync("gameInterop.playSound", "slam");
         var result = await EndTurnFunc();
         if (!result.Success) _error = result.Error;
         _ending = false;
@@ -210,6 +212,7 @@
     private async Task OnPauseResume()
     {
         _error = null;
+        await JS.InvokeVoidAsync("gameInterop.playSound", "menu");
         if (_paused)
         {
             var result = await ResumeTurnFunc();
@@ -229,6 +232,7 @@
         await StopMicAsync();
         _skipping = true;
         _error = null;
+        await JS.InvokeVoidAsync("gameInterop.playSound", "slam");
         var result = await SkipTurnFunc();
         if (!result.Success) _error = result.Error;
         _skipping = false;

@@ -309,6 +309,7 @@
         if (string.IsNullOrWhiteSpace(_createName) || string.IsNullOrEmpty(_selectedGame)) return;
         _creating = true;
         _createError = null;
+        await JS.InvokeVoidAsync("gameInterop.playSound", "confirm");
         GameState.PlayerName = _createName.Trim();
         GameState.SelectedGameType = _selectedGame;
         Nav.NavigateTo($"/room?action=create&game={_selectedGame}");
@@ -319,6 +320,7 @@
         if (string.IsNullOrWhiteSpace(_joinCode) || string.IsNullOrWhiteSpace(_joinName)) return;
         _joining = true;
         _joinError = null;
+        await JS.InvokeVoidAsync("gameInterop.playSound", "confirm");
         GameState.PlayerName = _joinName.Trim();
         Nav.NavigateTo($"/room?action=join&code={_joinCode.ToUpperInvariant()}");
     }

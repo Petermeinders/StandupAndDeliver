@@ -1,7 +1,75 @@
+// ── Audio ────────────────────────────────────────────────────────────────────
+const _audio = (() => {
+    const SFX = {
+        flip:    'audio/sfx/flip.ogg',
+        confirm: 'audio/sfx/confirm-click.mp3',
+        slam:    'audio/sfx/slam.mp3',
+        menu:    'audio/sfx/menu.ogg',
+        spell:   'audio/sfx/spell.ogg',
+        gold:    'audio/sfx/gold.ogg',
+        levelup: 'audio/sfx/levelup.ogg',
+        hit:     'audio/sfx/hit.mp3',
+    };
+
+    let _ctx = null;
+    let _buffers = {};
+    let _ready = false;
+    let _vol = 0.6;
+    // Raw ArrayBuffers fetched before AudioContext exists (no user gesture needed for fetch)
+    const _raw = {};
+
+    // Kick off fetches immediately so bytes are ready before first click
+    (async () => {
+        for (const [key, path] of Object.entries(SFX)) {
+            try {
+                const res = await fetch(path);
+                if (res.ok) _raw[key] = await res.arrayBuffer();
+            } catch (_) {}
+        }
+    })();
+
+    async function _unlock() {
+        if (_ctx) return;
+        try {
+            _ctx = new (window.AudioContext || window.webkitAudioContext)();
+            // Decode whatever raw bytes have arrived (most will be ready by now)
+            for (const [key, raw] of Object.entries(_raw)) {
+                try {
+                    // slice() copies the buffer — decodeAudioData transfers/neuters the original
+                    _buffers[key] = await _ctx.decodeAudioData(raw.slice(0));
+                } catch (_) {}
+            }
+            _ready = true;
+        } catch (_) {}
+    }
+
+    document.addEventListener('touchstart', _unlock, { once: true });
+    document.addEventListener('click',      _unlock, { once: true });
+
+    function play(key) {
+        if (!_ready || !_ctx || !_buffers[key]) return;
+        try {
+            const src = _ctx.createBufferSource();
+            src.buffer = _buffers[key];
+            const gain = _ctx.createGain();
+            gain.gain.value = _vol;
+            src.connect(gain);
+            gain.connect(_ctx.destination);
+            src.start();
+        } catch (_) {}
+    }
+
+    return { play };
+})();
+
 window.gameInterop = {
     _visibilityHandler: null,
     _recognition: null,
     _recognitionActive: false,
+
+    playSound: function (key) {
+        _audio.play(key);
+    },
 
     startSpeechRecognition: function (dotNetRef) {
         try {

@@ -1,4 +1,5 @@
 @* Game Picker — portrait cover-flow carousel *@
+@inject IJSRuntime JS
 
 <div class="game-carousel">
     <p class="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-4 text-center">Choose a game</p>
@@ -180,6 +181,7 @@ if (!string.IsNullOrEmpty(FocusedGameId))
         if (index < 0 || index >= Games.Count) return;
         var game = Games[index];
         if (LockedToGameId != null && game.Id != LockedToGameId) return;
+        await JS.InvokeVoidAsync("gameInterop.playSound", "menu");
         await SetFocus(index);
 
         if (!game.ComingSoon && !game.SinglePlayer && game.Id != SelectedGameId)

@@ -1,4 +1,5 @@
 ﻿@inject GameStateService GameState
+@inject IJSRuntime JS
 
 <div class="min-h-screen text-white flex flex-col p-4 max-w-2xl mx-auto">
 
@@ -68,4 +69,15 @@
 
 @code {
     [Parameter] public required Func<string, string?, Task<HubResult>> GameActionFunc { get; set; }
+
+    private bool _gameOverSoundPlayed;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (GameState.OneOState?.Phase == "GameOver" && !_gameOverSoundPlayed)
+        {
+            _gameOverSoundPlayed = true;
+            await JS.InvokeVoidAsync("gameInterop.playSound", "levelup");
+        }
+    }
 }
