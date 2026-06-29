@@ -1,0 +1,54 @@
+@* Roundtable ring — each seat shows name, gold count, current-turn glow. Skull is hidden. *@
+
+<div class="flex flex-wrap justify-center gap-2 px-1">
+    @foreach (var p in Players)
+    {
+        <div class="flex flex-col items-center gap-1 px-3 py-2 rounded-xl border transition-all
+                    @(p.IsCurrentPlayer
+                        ? "border-yellow-400 bg-yellow-400/10 shadow-[0_0_12px_rgba(251,191,36,0.4)]"
+                        : p.IsEliminated
+                            ? "border-gray-700 bg-gray-900/40 opacity-40"
+                            : "border-gray-700 bg-gray-900/60")">
+
+            @* Turn arrow *@
+            @if (p.IsCurrentPlayer)
+            {
+                <span class="text-yellow-400 text-xs font-bold animate-bounce">▼</span>
+            }
+
+            @* Name *@
+            <span class="text-xs font-semibold leading-none
+                         @(p.IsEliminated ? "line-through text-gray-600" : p.IsCurrentPlayer ? "text-yellow-300" : "text-gray-300")">
+                @p.Name
+            </span>
+
+            @* Gold count — everyone can see this *@
+            <div class="flex items-center gap-1">
+                <img src="/games/cursed-vault/coin.webp" alt="gold" class="w-4 h-4 rounded-sm object-cover" />
+                <span class="text-yellow-400 font-bold text-sm leading-none">@p.Gold</span>
+            </div>
+
+            @* Win progress dots *@
+            <div class="flex gap-0.5">
+                @for (int i = 0; i < 10; i++)
+                {
+                    var filled = i < p.Gold;
+                    <div class="w-1.5 h-1.5 rounded-full @(filled ? "bg-yellow-400" : "bg-gray-700")"></div>
+                }
+            </div>
+
+            @if (p.IsEliminated)
+            {
+                <span class="text-[10px] text-red-500 font-bold">OUT</span>
+            }
+            else if (!p.IsConnected)
+            {
+                <span class="text-[10px] text-gray-600">offline</span>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<CursedVaultPlayerDto> Players { get; set; } = [];
+}

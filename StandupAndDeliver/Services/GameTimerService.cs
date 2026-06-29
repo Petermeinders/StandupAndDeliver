@@ -216,7 +216,7 @@ public class GameTimerService(
     private async Task BroadcastLean(GameRoom room)
     {
         var dto = new GameStateDto(room.Phase, room.RoomCode,
-            room.Players.Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected)).ToList(),
+            room.Players.Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected, p.IsBot)).ToList(),
             room.GameType);
         await hubContext.Clients.Group(room.RoomCode).ReceiveGameState(dto);
     }

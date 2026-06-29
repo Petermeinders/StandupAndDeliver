@@ -15,6 +15,31 @@ public class GameHub(
     private ICardGame GetGame(string gameType) =>
         cardGames.First(g => g.GameType == gameType);
 
+    public async Task<HubResult> CreateOrJoinRoom(string? code, string playerName, string gameType, bool useFunName)
+    {
+        if (string.IsNullOrWhiteSpace(playerName))
+            return new HubResult(false, "Player name is required.");
+
+        var validTypes = cardGames.Select(g => g.GameType).ToArray();
+        if (!validTypes.Contains(gameType)) gameType = validTypes.FirstOrDefault() ?? "standup";
+
+        var safeName = WebUtility.HtmlEncode(playerName.Trim());
+        var (room, roomCode, created, error) = gameRoomService.CreateOrJoinRoom(code, safeName, Context.ConnectionId, gameType, useFunName);
+
+        if (room is null) return new HubResult(false, error ?? "Failed to join room.");
+
+        await Groups.AddToGroupAsync(Context.ConnectionId, roomCode);
+        await Clients.Group(roomCode).ReceiveGameState(BuildLeanDto(room));
+
+        var action = created ? "RoomCreated" : "PlayerJoined";
+        _ = eventLog.LogAsync(action, gameType, roomCode, safeName, room.Players.Count);
+
+        // Cancel any pending empty-room timer since a player just joined
+        gameRoomService.CancelEmptyRoomTimer(roomCode);
+
+        return new HubResult(true, RoomCode: roomCode);
+    }
+
     public async Task<HubResult> CreateRoom(string playerName, string gameType = "standup")
     {
         if (string.IsNullOrWhiteSpace(playerName))
@@ -110,6 +135,9 @@ public class GameHub(
                 player.IsConnected = false;
                 room.LastActivity = DateTime.UtcNow;
 
+                // Immediately broadcast so remaining clients see updated presence
+                await Clients.Group(room.RoomCode).ReceiveGameState(BuildLeanDto(room));
+
                 var game = GetGame(room.GameType);
                 await game.OnPlayerDisconnected(room, Context.ConnectionId);
 
@@ -123,12 +151,37 @@ public class GameHub(
                     if (r is null) return;
                     var g = GetGame(r.GameType);
                     await g.OnPlayerGraceExpired(r, playerName, wasHost);
+
+                    // Start empty-room timer if no humans remain
+                    if (r.Players.All(p => !p.IsConnected || p.IsBot))
+                        gameRoomService.StartEmptyRoomTimer(roomCode);
                 });
 
                 break;
             }
         }
         await base.OnDisconnectedAsync(exception);
+    }
+
+    public async Task<HubResult> PromoteToHost()
+    {
+        var room = GetRoomForCaller();
+        if (room is null) return new HubResult(false, "Room not found.");
+
+        var caller = room.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
+        if (caller is null) return new HubResult(false, "Player not found.");
+
+        // Only allow promotion if no connected host exists
+        var hasConnectedHost = room.Players.Any(p => p.IsHost && p.IsConnected && !p.IsBot);
+        if (hasConnectedHost) return new HubResult(false, "The host is still connected.");
+
+        // Remove old host flag, promote caller
+        foreach (var p in room.Players) p.IsHost = false;
+        caller.IsHost = true;
+
+        await Clients.Group(room.RoomCode).ReceiveGameState(BuildLeanDto(room));
+        _ = eventLog.LogAsync("HostPromoted", room.GameType, room.RoomCode, caller.Name, room.Players.Count);
+        return new HubResult(true);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -139,6 +192,6 @@ public class GameHub(
 
     public static GameStateDto BuildLeanDto(GameRoom room) =>
         new(room.Phase, room.RoomCode,
-            room.Players.Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected)).ToList(),
+            room.Players.Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected, p.IsBot)).ToList(),
             room.GameType);
 }

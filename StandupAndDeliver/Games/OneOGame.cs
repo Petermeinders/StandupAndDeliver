@@ -3,18 +3,28 @@ using System.Text.Json;
 using Microsoft.AspNetCore.SignalR;
 using StandupAndDeliver.Hubs;
 using StandupAndDeliver.Models;
+using StandupAndDeliver.Services;
 using StandupAndDeliver.Shared;
 
 namespace StandupAndDeliver.Games;
 
-public class OneOGame(IHubContext<GameHub, IGameClient> hubContext) : ICardGame
+public class OneOGame(IHubContext<GameHub, IGameClient> hubContext, GameRoomService gameRoomService) : ICardGame
 {
     private readonly ConcurrentDictionary<string, OneOGameState> _states = new();
 
     public string GameType => "OneO";
 
+    private const string BotName = "🤖 OneO Bot";
+
     public async Task StartGame(GameRoom room, string connectionId)
     {
+        // Rename lobby bot to game-specific name, or add one if somehow absent
+        var existingBot = room.Players.FirstOrDefault(p => p.IsBot);
+        if (existingBot is not null)
+            existingBot.Name = BotName;
+        else if (room.Players.Count(p => !p.IsBot) == 1)
+            room.Players.Add(new Player { Name = BotName, ConnectionId = $"bot-{room.RoomCode}", IsBot = true, IsConnected = false });
+
         var state = new OneOGameState();
         var deck = GenerateDeck();
         Shuffle(deck);
@@ -27,7 +37,6 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext) : ICardGame
 
         state.DrawPile = deck;
 
-        // Flip top card; re-flip if WildDrawFour
         OneOCard topCard;
         do
         {
@@ -62,6 +71,7 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext) : ICardGame
         _states[room.RoomCode] = state;
 
         await BroadcastState(room, state);
+        MaybeScheduleBotTurn(room, state);
     }
 
     public async Task<HubResult> HandleAction(string action, string? payloadJson, GameRoom room, string connectionId)
@@ -82,9 +92,8 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext) : ICardGame
     public async Task OnPlayerRejoined(GameRoom room, string connectionId)
     {
         if (!_states.TryGetValue(room.RoomCode, out var state)) return;
-        // Re-broadcast lean state + game-specific state to the rejoining player
         var lean = new GameStateDto(room.Phase, room.RoomCode,
-            room.Players.Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected)).ToList(),
+            room.Players.Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected, p.IsBot)).ToList(),
             room.GameType);
         await hubContext.Clients.Client(connectionId).ReceiveGameState(lean);
 
@@ -149,6 +158,7 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext) : ICardGame
             room.Phase = GamePhase.GameOver;
             state.LastAction = $"{currentPlayer.Name} wins!";
             await BroadcastState(room, state);
+            ScheduleLobbyReset(room);
             return new HubResult(true);
         }
 
@@ -185,6 +195,7 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext) : ICardGame
 
         state.CurrentPlayerIndex = nextIndex;
         await BroadcastState(room, state);
+        MaybeScheduleBotTurn(room, state);
         return new HubResult(true);
     }
 
@@ -213,7 +224,171 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext) : ICardGame
         }
 
         await BroadcastState(room, state);
+        MaybeScheduleBotTurn(room, state);
         return new HubResult(true);
+    }
+
+    // ── Bot logic ──────────────────────────────────────────────────────────────
+
+    private void MaybeScheduleBotTurn(GameRoom room, OneOGameState state)
+    {
+        if (room.Phase != GamePhase.Playing) return;
+        var current = room.Players[state.CurrentPlayerIndex];
+        if (!current.IsBot) return;
+        _ = RunBotTurn(room, current.ConnectionId);
+    }
+
+    private async Task RunBotTurn(GameRoom room, string botConnectionId)
+    {
+        // Simulate thinking time: 1.2–2.4s
+        await Task.Delay(1200 + Random.Shared.Next(1200));
+
+        await room.Lock.WaitAsync();
+        try
+        {
+            if (!_states.TryGetValue(room.RoomCode, out var state)) return;
+            if (room.Phase != GamePhase.Playing) return;
+
+            var bot = room.Players[state.CurrentPlayerIndex];
+            if (!bot.IsBot || bot.ConnectionId != botConnectionId) return;
+
+            var hand = state.PlayerHands[bot.Name];
+            var topDiscard = state.DiscardPile.Last();
+
+            // Find opponent hand size for aggressive play decisions
+            var opponentHandSize = room.Players
+                .Where(p => !p.IsBot)
+                .Select(p => state.PlayerHands.TryGetValue(p.Name, out var h) ? h.Count : 99)
+                .DefaultIfEmpty(99).Min();
+
+            var chosen = ChooseBotCard(hand, topDiscard, state.CurrentColor, opponentHandSize);
+
+            if (chosen is not null)
+            {
+                string? chosenColor = null;
+                if (chosen.Type is OneOCardType.Wild or OneOCardType.WildDrawFour)
+                    chosenColor = BotChooseColor(hand).ToString();
+
+                var payload = JsonSerializer.Serialize(new
+                {
+                    cardId = chosen.Id,
+                    chosenColor
+                });
+                await PlayCard(room, state, botConnectionId, payload);
+            }
+            else
+            {
+                // Draw a card
+                await DrawCard(room, state, botConnectionId);
+
+                // If drawn card is playable, play it immediately after a short delay
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(600 + Random.Shared.Next(400));
+                    await room.Lock.WaitAsync();
+                    try
+                    {
+                        if (!_states.TryGetValue(room.RoomCode, out var s2)) return;
+                        if (room.Phase != GamePhase.Playing) return;
+                        var nowBot = room.Players[s2.CurrentPlayerIndex];
+                        if (!nowBot.IsBot) return; // turn passed after draw, no play needed
+
+                        var h2 = s2.PlayerHands[nowBot.Name];
+                        var top2 = s2.DiscardPile.Last();
+                        var drawn = h2.LastOrDefault();
+                        if (drawn is not null && drawn.CanPlayOn(top2, s2.CurrentColor))
+                        {
+                            string? cc = drawn.Type is OneOCardType.Wild or OneOCardType.WildDrawFour
+                                ? BotChooseColor(h2).ToString() : null;
+                            var payload = JsonSerializer.Serialize(new { cardId = drawn.Id, chosenColor = cc });
+                            await PlayCard(room, s2, nowBot.ConnectionId, payload);
+                        }
+                    }
+                    finally { room.Lock.Release(); }
+                });
+            }
+        }
+        finally
+        {
+            room.Lock.Release();
+        }
+    }
+
+    // Heuristic: rank every playable card, return highest priority or null if none.
+    private static OneOCard? ChooseBotCard(List<OneOCard> hand, OneOCard topDiscard, OneOColor currentColor, int opponentHandSize)
+    {
+        var playable = hand.Where(c => c.CanPlayOn(topDiscard, currentColor)).ToList();
+        if (playable.Count == 0) return null;
+
+        // Save WildDrawFour for when opponent is close to winning
+        // Score each card; higher = more preferred
+        return playable
+            .Select(c => (card: c, score: BotCardScore(c, hand, currentColor, opponentHandSize)))
+            .OrderByDescending(x => x.score)
+            .First().card;
+    }
+
+    private static int BotCardScore(OneOCard card, List<OneOCard> hand, OneOColor currentColor, int opponentHandSize)
+    {
+        int score = 0;
+
+        // Action cards have base priority
+        score += card.Type switch
+        {
+            OneOCardType.WildDrawFour => opponentHandSize <= 4 ? 80 : 30, // Hold unless opponent is close
+            OneOCardType.DrawTwo      => opponentHandSize <= 6 ? 60 : 25,
+            OneOCardType.Skip         => 40,
+            OneOCardType.Reverse      => 20,
+            OneOCardType.Wild         => 15, // Save wilds when you have color cards
+            OneOCardType.Number       => 0,
+            _ => 0
+        };
+
+        // Prefer matching color (keeps current color in our favor)
+        if (card.Color == currentColor) score += 10;
+
+        // Prefer cards where we have more of that color (color strength)
+        int colorCount = hand.Count(c => c.Color == card.Color);
+        score += colorCount * 3;
+
+        // Prefer lower-value number cards when opponent isn't close (dump hand size)
+        if (card.Type == OneOCardType.Number) score += 5 - Math.Min(card.Value / 2, 5);
+
+        // Aggressive mode when opponent has few cards
+        if (opponentHandSize <= 2 && card.Type is OneOCardType.DrawTwo or OneOCardType.WildDrawFour or OneOCardType.Skip)
+            score += 40;
+
+        return score;
+    }
+
+    private static OneOColor BotChooseColor(List<OneOCard> hand)
+    {
+        var colors = new[] { OneOColor.Red, OneOColor.Green, OneOColor.Blue, OneOColor.Yellow };
+        return colors
+            .Select(c => (color: c, count: hand.Count(card => card.Color == c)))
+            .OrderByDescending(x => x.count)
+            .First().color;
+    }
+
+    // ── Lobby reset ───────────────────────────────────────────────────────────
+
+    private void ScheduleLobbyReset(GameRoom room)
+    {
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(8000);
+            await room.Lock.WaitAsync();
+            try
+            {
+                _states.TryRemove(room.RoomCode, out _);
+                gameRoomService.ResetToLobby(room);
+                var lean = new GameStateDto(room.Phase, room.RoomCode,
+                    room.Players.Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected, p.IsBot)).ToList(),
+                    room.GameType);
+                await hubContext.Clients.Group(room.RoomCode).ReceiveGameState(lean);
+            }
+            finally { room.Lock.Release(); }
+        });
     }
 
     // ── Broadcast ─────────────────────────────────────────────────────────────
@@ -221,7 +396,7 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext) : ICardGame
     private async Task BroadcastState(GameRoom room, OneOGameState state)
     {
         var lean = new GameStateDto(room.Phase, room.RoomCode,
-            room.Players.Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected)).ToList(),
+            room.Players.Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected, p.IsBot)).ToList(),
             room.GameType);
         await hubContext.Clients.Group(room.RoomCode).ReceiveGameState(lean);
 
@@ -239,7 +414,7 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext) : ICardGame
     private static OneOGameStateDto BuildDto(GameRoom room, OneOGameState state, IReadOnlyList<OneOCardDto> myHand)
     {
         var players = room.Players
-            .Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected))
+            .Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected, p.IsBot))
             .ToList();
         var handCounts = (IReadOnlyDictionary<string, int>)room.Players
             .ToDictionary(p => p.Name, p => state.PlayerHands.TryGetValue(p.Name, out var h) ? h.Count : 0);

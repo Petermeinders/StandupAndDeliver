@@ -74,7 +74,6 @@ public class GameStateService
     {
         PlatformState = null;
         _gameStates.Clear();
-        PlayerName = null;
         SecondsRemaining = 0;
         CurrentTranscript = "";
         _reactions.Clear();

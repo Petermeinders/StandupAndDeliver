@@ -1,5 +1,6 @@
 @page "/room"
 @rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@inject HubService Hub
 @inject GameStateService GameState
 @inject GameRegistry Registry
 @inject NavigationManager Nav
@@ -9,17 +10,21 @@
 @inject SettingsService Settings
 @implements IAsyncDisposable
 
-<PageTitle>Peter's Party Games</PageTitle>
+<PageTitle>Fireside Arcade</PageTitle>
 
 <div class="landing-bg"></div>
 
+<AppHeader @ref="_header" OnSettingsOpen="OpenSettings" />
+<SettingsModal @ref="_settingsModal" />
+
 @if (_reconnecting)
 {
-    <div class="fixed top-0 inset-x-0 z-50 bg-yellow-400 text-black text-center text-sm font-semibold py-2">
+    <div class="fixed top-12 inset-x-0 z-50 bg-yellow-400 text-black text-center text-sm font-semibold py-2">
         Reconnecting…
     </div>
 }
 
+<div class="@(Settings.StickyHeader ? "pt-12" : "")">
 @if (_connecting)
 {
     <div class="min-h-screen text-white flex items-center justify-center">
@@ -88,13 +93,15 @@ else
         <p class="text-gray-400">Loading…</p>
     </div>
 }
+</div>
 
 @code {
     [Parameter, SupplyParameterFromQuery] public string? Action { get; set; }
     [Parameter, SupplyParameterFromQuery] public string? Code { get; set; }
     [Parameter, SupplyParameterFromQuery] public string? Game { get; set; }
 
-    private HubConnection? _hub;
+    private AppHeader? _header;
+    private SettingsModal? _settingsModal;
     private VisibilityInterop? _visibilityInterop;
     private bool _connecting = true;
     private bool _reconnecting;
@@ -114,115 +121,65 @@ else
         await Theme.InitializeAsync();
         await Settings.InitializeAsync();
 
-        if (string.IsNullOrEmpty(GameState.PlayerName))
-        {
-            Nav.NavigateTo("/");
-            return;
-        }
-
         _gameParams = new Dictionary<string, object>
         {
             ["GameActionFunc"] = (Func<string, string?, Task<HubResult>>)GameAction
         };
 
-        _hub = new HubConnectionBuilder()
-            .WithUrl(Nav.ToAbsoluteUri("/gamehub"), options =>
-            {
-                options.Transports = HttpTransportType.WebSockets;
-                options.SkipNegotiation = true;
-            })
-            .WithAutomaticReconnect([TimeSpan.Zero, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10)])
-            .Build();
-
-        _hub.Reconnected += async _ =>
-        {
-            _reconnecting = false;
-            if (GameState.PlatformState is not null && GameState.PlayerName is not null)
-                await _hub.InvokeAsync<HubResult>("RejoinRoom", GameState.PlatformState.RoomCode, GameState.PlayerName);
-            await InvokeAsync(StateHasChanged);
-        };
-
-        _hub.Reconnecting += _ =>
-        {
-            _reconnecting = true;
-            return InvokeAsync(StateHasChanged);
-        };
-
-        _hub.Closed += _ =>
-        {
-            _reconnecting = false;
-            _hubClosed = true;
-            _closedRoomCode = GameState.PlatformState?.RoomCode;
-            _closedPlayerName = GameState.PlayerName;
-            return InvokeAsync(StateHasChanged);
-        };
-
-        _hub.On<GameStateDto>("ReceiveGameState", async state =>
-        {
-            GameState.UpdatePlatform(state);
-            if (state.Phase == GamePhase.GameOver)
-                await SavedSession.ClearAsync();
-            else if (state.RoomCode is not null && GameState.PlayerName is not null)
-                await SavedSession.SaveAsync(state.RoomCode, GameState.PlayerName);
-            await InvokeAsync(StateHasChanged);
-        });
-
-        _hub.On<string, string>("ReceiveGameSpecificState", (gameType, json) =>
-        {
-            GameState.UpdateGameState(gameType, json);
-            InvokeAsync(StateHasChanged);
-        });
-
-        _hub.On<int>("ReceiveTimerTick", seconds =>
-        {
-            GameState.UpdateTimer(seconds);
-            InvokeAsync(StateHasChanged);
-        });
-
-        _hub.On<int, int>("ReceiveVoteCount", (submitted, total) =>
-        {
-            GameState.UpdateVoteCount(submitted, total);
-            InvokeAsync(StateHasChanged);
-        });
-
-        _hub.On<string, string>("ReceiveReaction", (playerName, emoji) =>
-        {
-            GameState.AddReaction(playerName, emoji);
-            InvokeAsync(StateHasChanged);
-        });
-
-        _hub.On<string>("ReceiveTranscript", text =>
-        {
-            GameState.UpdateTranscript(text);
-            InvokeAsync(StateHasChanged);
-        });
-
-        _hub.On<GamePhase>("ReceivePhaseChange", phase =>
-        {
-            if (GameState.PlatformState is not null)
-                GameState.UpdatePlatform(GameState.PlatformState with { Phase = phase });
-            InvokeAsync(StateHasChanged);
-        });
-
-        _hub.On<string>("ReceiveError", error =>
-        {
-            Console.Error.WriteLine($"[Hub error] {error}");
-            InvokeAsync(StateHasChanged);
-        });
+        // Subscribe to hub events
+        Hub.OnGameState += OnGameState;
+        Hub.OnGameSpecificState += OnGameSpecificState;
+        Hub.OnTimerTick += OnTimerTick;
+        Hub.OnVoteCount += OnVoteCount;
+        Hub.OnReaction += OnReaction;
+        Hub.OnTranscript += OnTranscript;
+        Hub.OnReconnecting += OnReconnecting;
+        Hub.OnReconnected += OnReconnectedAsync;
+        Hub.OnClosed += OnHubClosed;
 
         try
         {
-            await _hub.StartAsync();
+            await Hub.EnsureConnectedAsync();
+
+            // If we already have a room (joined from header), skip the create/join
+            if (GameState.PlatformState is not null && Action != "rejoin")
+            {
+                _connecting = false;
+                await InvokeAsync(StateHasChanged);
+                RegisterVisibility();
+                return;
+            }
+
+            if (string.IsNullOrEmpty(GameState.PlayerName))
+            {
+                // Try restoring from localStorage
+                var savedName = await JS.InvokeAsync<string?>("localStorage.getItem", "sad_name");
+                if (!string.IsNullOrEmpty(savedName))
+                    GameState.PlayerName = savedName;
+                else
+                {
+                    Nav.NavigateTo("/");
+                    return;
+                }
+            }
 
             var gameType = Game ?? GameState.SelectedGameType ?? "standup";
 
             HubResult result;
             if (Action == "create")
-                result = await _hub.InvokeAsync<HubResult>("CreateRoom", GameState.PlayerName, gameType);
+                result = await Hub.CreateOrJoinAsync(null, GameState.PlayerName, gameType, false);
             else if (Action == "join" && !string.IsNullOrEmpty(Code))
-                result = await _hub.InvokeAsync<HubResult>("JoinRoom", Code, GameState.PlayerName);
+                result = await Hub.JoinAsync(Code, GameState.PlayerName);
             else if (Action == "rejoin" && !string.IsNullOrEmpty(Code))
-                result = await _hub.InvokeAsync<HubResult>("RejoinRoom", Code, GameState.PlayerName);
+                result = await Hub.RejoinAsync(Code, GameState.PlayerName);
+            else if (Action is null && GameState.PlatformState is not null)
+            {
+                // Navigated directly to /room while already in a game
+                _connecting = false;
+                await InvokeAsync(StateHasChanged);
+                RegisterVisibility();
+                return;
+            }
             else
             {
                 _fatalError = "Invalid room action.";
@@ -251,16 +208,82 @@ else
         }
 
         _connecting = false;
-        _visibilityInterop = new VisibilityInterop(JS, _hub, GameState);
-        await _visibilityInterop.RegisterAsync();
+        RegisterVisibility();
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task<HubResult> StartGame() =>
-        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("StartGame");
+    private void RegisterVisibility()
+    {
+        if (Hub.Connection is not null)
+            _visibilityInterop = new VisibilityInterop(JS, Hub.Connection, GameState);
+        _ = _visibilityInterop?.RegisterAsync();
+    }
 
-    private async Task<HubResult> GameAction(string action, string? payload = null) =>
-        _hub is null ? new HubResult(false, "Not connected.") : await _hub.InvokeAsync<HubResult>("GameAction", action, payload);
+    private async Task OnGameState(GameStateDto state)
+    {
+        GameState.UpdatePlatform(state);
+        if (state.Phase == GamePhase.GameOver)
+            await SavedSession.ClearAsync();
+        else if (state.RoomCode is not null && GameState.PlayerName is not null)
+            await SavedSession.SaveAsync(state.RoomCode, GameState.PlayerName);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private Task OnGameSpecificState(string gameType, string json)
+    {
+        GameState.UpdateGameState(gameType, json);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task OnTimerTick(int seconds)
+    {
+        GameState.UpdateTimer(seconds);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task OnVoteCount(int submitted, int total)
+    {
+        GameState.UpdateVoteCount(submitted, total);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task OnReaction(string name, string emoji)
+    {
+        GameState.AddReaction(name, emoji);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task OnTranscript(string text)
+    {
+        GameState.UpdateTranscript(text);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private void OnReconnecting()
+    {
+        _reconnecting = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnReconnectedAsync()
+    {
+        _reconnecting = false;
+        if (GameState.PlatformState is not null && GameState.PlayerName is not null)
+            _ = Hub.RejoinAsync(GameState.PlatformState.RoomCode, GameState.PlayerName);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnHubClosed()
+    {
+        _reconnecting = false;
+        _hubClosed = true;
+        _closedRoomCode = GameState.PlatformState?.RoomCode;
+        _closedPlayerName = GameState.PlayerName;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task<HubResult> StartGame() => await Hub.StartGameAsync();
+    private async Task<HubResult> GameAction(string action, string? payload = null) => await Hub.GameActionAsync(action, payload);
 
     private async Task TryRejoinAsync()
     {
@@ -270,13 +293,10 @@ else
         await InvokeAsync(StateHasChanged);
         try
         {
-            if (_hub!.State == HubConnectionState.Disconnected)
-                await _hub.StartAsync();
-            var result = await _hub.InvokeAsync<HubResult>("RejoinRoom", _closedRoomCode, _closedPlayerName);
+            await Hub.EnsureConnectedAsync();
+            var result = await Hub.RejoinAsync(_closedRoomCode, _closedPlayerName);
             if (result.Success)
-            {
                 _hubClosed = false;
-            }
             else
             {
                 _rejoinError = result.Error ?? "Failed to rejoin.";
@@ -299,11 +319,21 @@ else
         Nav.NavigateTo("/");
     }
 
+    private void OpenSettings() => _settingsModal?.Open();
+
     public async ValueTask DisposeAsync()
     {
+        Hub.OnGameState -= OnGameState;
+        Hub.OnGameSpecificState -= OnGameSpecificState;
+        Hub.OnTimerTick -= OnTimerTick;
+        Hub.OnVoteCount -= OnVoteCount;
+        Hub.OnReaction -= OnReaction;
+        Hub.OnTranscript -= OnTranscript;
+        Hub.OnReconnecting -= OnReconnecting;
+        Hub.OnReconnected -= OnReconnectedAsync;
+        Hub.OnClosed -= OnHubClosed;
+
         if (_visibilityInterop is not null)
             await _visibilityInterop.DisposeAsync();
-        if (_hub is not null)
-            await _hub.DisposeAsync();
     }
 }

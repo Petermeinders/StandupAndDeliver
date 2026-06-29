@@ -1,6 +1,6 @@
 {
-  "name": "Peter's Party Games",
-  "short_name": "Party Games",
+  "name": "Fireside Arcade",
+  "short_name": "Fireside",
   "description": "Pick a game, grab your friends",
   "start_url": "/",
   "display": "standalone",

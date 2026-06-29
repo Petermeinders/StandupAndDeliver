@@ -1,0 +1,82 @@
+@inject GameStateService GameState
+@inject IJSRuntime JS
+
+@{
+    var gs = GameState.GetState<CursedVaultGameStateDto>("cursed-vault");
+}
+
+@if (gs is null)
+{
+    <div class="flex items-center justify-center h-64 text-gray-400">Loading Cursed Vault…</div>
+    return;
+}
+
+@if (gs.Phase == "GameOver")
+{
+    <CursedVaultGameOver State="gs" />
+    return;
+}
+
+<div class="flex flex-col h-full min-h-0 gap-3 px-2 py-3 select-none">
+
+    @* ── Round badge ── *@
+    <div class="flex items-center justify-between text-xs text-gray-500 px-1">
+        <span class="uppercase tracking-widest font-semibold">Round @gs.Round</span>
+        @if (gs.LastTurnSummary is not null)
+        {
+            <CursedVaultLastTurn Summary="gs.LastTurnSummary" />
+        }
+    </div>
+
+    @* ── Roundtable player ring ── *@
+    <CursedVaultPlayerList Players="gs.Players" />
+
+    @* ── Center pile + flip feed ── *@
+    <div class="flex flex-col items-center gap-2">
+        <CursedVaultPile PileCount="gs.PileCount" IsMyTurn="gs.IsMyTurn" />
+        @if (gs.ActiveGamble is not null)
+        {
+            <CursedVaultFlipFeed Gamble="gs.ActiveGamble" IsMyTurn="gs.IsMyTurn" />
+        }
+    </div>
+
+    @* ── Your hand ── *@
+    <CursedVaultHand MyGold="gs.MyGold" MyHasSkull="gs.MyHasSkull" />
+
+    @* ── Action panel ── *@
+    <CursedVaultActionPanel
+        State="gs"
+        OnPlayCard="PlayCard"
+        OnStartGamble="StartGamble"
+        OnFlipCard="FlipCard"
+        OnPlayCardAfterGamble="PlayCardAfterGamble" />
+
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Func<string, string?, Task<HubResult>> GameActionFunc { get; set; } = default!;
+
+    private async Task PlayCard(string cardType)
+    {
+        await JS.InvokeVoidAsync("gameInterop.playSound", "click");
+        await GameActionFunc("PlayCard", $"{{\"type\":\"{cardType}\"}}");
+    }
+
+    private async Task StartGamble(int count)
+    {
+        await JS.InvokeVoidAsync("gameInterop.playSound", "click");
+        await GameActionFunc("StartGamble", $"{{\"count\":{count}}}");
+    }
+
+    private async Task FlipCard()
+    {
+        await JS.InvokeVoidAsync("gameInterop.playSound", "flip");
+        await GameActionFunc("FlipCard", null);
+    }
+
+    private async Task PlayCardAfterGamble(string cardType)
+    {
+        await JS.InvokeVoidAsync("gameInterop.playSound", "click");
+        await GameActionFunc("PlayCardAfterGamble", $"{{\"type\":\"{cardType}\"}}");
+    }
+}

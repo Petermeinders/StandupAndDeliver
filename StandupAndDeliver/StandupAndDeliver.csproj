@@ -5,6 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <!-- Workaround for .NET 10 SDK ApplyCompressionNegotiation duplicate-key bug in debug builds -->
+    <CompressionEnabled Condition="'$(Configuration)' == 'Debug'">false</CompressionEnabled>
   </PropertyGroup>
 
   <ItemGroup>

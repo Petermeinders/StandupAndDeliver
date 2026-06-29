@@ -248,5 +248,44 @@ window.gameInterop = {
             gameInterop._deferredInstallPrompt = null;
             nudge.classList.add('pwa-hidden');
         });
-    }
+    },
+
+    // ── QR Code scanning via camera (BarcodeDetector API + file input fallback) ──
+    scanQrCode: function () {
+        return new Promise((resolve, reject) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.capture = 'environment';
+            input.style.display = 'none';
+            document.body.appendChild(input);
+
+            input.onchange = async () => {
+                const file = input.files && input.files[0];
+                document.body.removeChild(input);
+                if (!file) { reject('No file selected'); return; }
+
+                try {
+                    const img = await createImageBitmap(file);
+                    if ('BarcodeDetector' in window) {
+                        const detector = new BarcodeDetector({ formats: ['qr_code'] });
+                        const codes = await detector.detect(img);
+                        if (codes.length > 0) resolve(codes[0].rawValue);
+                        else reject('No QR code found in image');
+                    } else {
+                        reject('QR scanning requires Chrome or Edge');
+                    }
+                } catch (err) {
+                    reject(String(err));
+                }
+            };
+
+            input.oncancel = () => {
+                document.body.removeChild(input);
+                reject('Cancelled');
+            };
+
+            input.click();
+        });
+    },
 };

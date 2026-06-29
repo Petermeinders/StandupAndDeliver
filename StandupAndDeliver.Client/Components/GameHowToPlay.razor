@@ -58,6 +58,75 @@ else if (GameId == "OneO")
         }
     </div>
 }
+else if (GameId == "cursed-vault")
+{
+    <div class="bg-gray-900 bg-opacity-80 rounded-2xl mb-3 overflow-hidden">
+        <button @onclick="() => _howToPlayOpen = !_howToPlayOpen"
+                class="w-full flex items-center justify-between px-6 py-4 text-left">
+            <span class="font-semibold text-yellow-400">How to play</span>
+            <span class="text-gray-500 text-lg transition-transform @(_howToPlayOpen ? "rotate-180" : "")">▾</span>
+        </button>
+        @if (_howToPlayOpen)
+        {
+            <div class="px-6 pb-5 text-sm text-gray-400 space-y-3 border-t border-gray-800 pt-4">
+                <p>Everyone starts with <span class="text-gray-300 font-semibold">5 gold cards</span> and <span class="text-gray-300 font-semibold">1 skull card</span> in hand. Cards are played into a shared pile — and that pile is what you gamble against.</p>
+                <div class="space-y-2 text-xs">
+                    <p class="text-gray-500 font-semibold uppercase tracking-wider mb-1">Round 1 — Seed the vault</p>
+                    <p>Every player must play one gold card from their hand into the shared pile. No gambling yet. This builds the pool everyone will risk against.</p>
+
+                    <p class="text-gray-500 font-semibold uppercase tracking-wider mb-1 mt-3">Round 2+ — Your turn</p>
+                    <p>Each turn you choose one of two actions:</p>
+                    <p><span class="text-white font-semibold">▸ Play a card</span> — put a gold or skull from your hand into the pile, then it's the next player's turn.</p>
+                    <p><span class="text-white font-semibold">▸ Gamble</span> — declare how many cards to flip from the pile (between 1 and the pile size). Then flip one at a time:</p>
+                    <p class="ml-3">💰 Gold flip → you collect 1 gold permanently. Keep going until your count is done.</p>
+                    <p class="ml-3">💀 Skull flip → disaster. All flipped cards shuffle back into the pile. You lose your skull card from hand. If you already lost it — you're <span class="text-red-400 font-semibold">eliminated</span> and your gold drops to zero.</p>
+                    <p>Complete your declared flips safely? You must then play one card from your hand into the pile before passing the turn.</p>
+                </div>
+                <div class="space-y-1 text-xs mt-1">
+                    <p class="text-gray-500 font-semibold uppercase tracking-wider mb-1">Winning</p>
+                    <p>Reach <span class="text-yellow-400 font-semibold">10 gold</span> for an instant win. Otherwise, be the <span class="text-yellow-400 font-semibold">last player standing</span> — everyone else gets skull-hit twice and eliminated.</p>
+                </div>
+                <p class="text-gray-500 text-xs pt-1">The twist: skulls are in the pile because <em>players put them there</em>. Play your skull card to the pile to threaten anyone who gambles next.</p>
+            </div>
+        }
+    </div>
+
+    <div class="bg-gray-900 bg-opacity-80 rounded-2xl mb-3 overflow-hidden">
+        <button @onclick="() => _exampleOpen = !_exampleOpen"
+                class="w-full flex items-center justify-between px-6 py-4 text-left">
+            <span class="font-semibold text-gray-300">Example</span>
+            <span class="text-gray-500 text-lg transition-transform @(_exampleOpen ? "rotate-180" : "")">▾</span>
+        </button>
+        @if (_exampleOpen)
+        {
+            <div class="px-6 pb-5 text-sm text-gray-400 space-y-4 border-t border-gray-800 pt-4">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-2">Setup (2 players, end of round 1)</p>
+                    <p>Both players played gold in round 1. The pile now has <span class="text-gray-200 font-semibold">2 gold cards</span>. You have 4 gold + skull in hand. Opponent has 4 gold + skull in hand.</p>
+                </div>
+
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-2">Round 2 — Opponent's turn</p>
+                    <p>Opponent plays their <span class="text-white font-semibold">skull card</span> into the pile. Pile is now: 2 gold, 1 skull. Sneaky.</p>
+                </div>
+
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-widest text-yellow-400 mb-2">Round 2 — Your turn</p>
+                    <p>You decide to gamble <span class="text-white font-semibold">2 cards</span> from the pile (3 cards total, you pick 2).</p>
+                    <p class="mt-1"><span class="text-yellow-400 font-semibold">Flip 1</span> → 💰 Gold. You collect 1 gold (now 5 total). One flip left.</p>
+                    <p><span class="text-red-400 font-semibold">Flip 2</span> → 💀 Skull. Both flipped cards (the gold and the skull) reshuffle into the pile. You lose your skull card from hand.</p>
+                    <p class="text-gray-500 text-xs mt-1">You kept the 1 gold you collected before the skull. The skulls in the pile are dangerous — but you only lose your hand skull, not your stash.</p>
+                </div>
+
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-widest text-green-400 mb-1">Next skull hit</p>
+                    <p class="text-gray-300">If you gamble again and hit another skull — you're <span class="text-red-400 font-semibold">eliminated</span>. Your skull card is gone, so there's nothing left to spare.</p>
+                </div>
+
+            </div>
+        }
+    </div>
+}
 else if (GameId == "crypt-sweepers")
 {
     <div class="bg-gray-900 rounded-2xl mb-3 overflow-hidden">

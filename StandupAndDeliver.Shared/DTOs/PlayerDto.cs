@@ -4,5 +4,6 @@ public record PlayerDto(
     string Name,
     int Score,
     bool IsHost,
-    bool IsConnected
+    bool IsConnected,
+    bool IsBot = false
 );

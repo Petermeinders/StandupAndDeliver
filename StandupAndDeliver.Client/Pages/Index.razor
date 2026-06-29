@@ -1,30 +1,34 @@
 @page "/"
 @rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
 @inject GameStateService GameState
+@inject HubService Hub
+@inject ToastService Toast
 @inject GameRegistry Registry
 @inject NavigationManager Nav
 @inject HttpClient Http
 @inject ThemeService Theme
 @inject SettingsService Settings
 @inject IJSRuntime JS
+@implements IDisposable
 
-<PageTitle>Peter's Party Games</PageTitle>
+<PageTitle>Fireside Arcade</PageTitle>
 
+<AppHeader @ref="_header" OnSettingsOpen="OpenSettings" />
 <SettingsModal @ref="_settingsModal" />
 
 <div class="landing-bg" style="@_bgStyle"></div>
-<div class="min-h-screen text-white flex flex-col items-center justify-center p-6 relative z-10 overflow-x-hidden">
+<div class="@(Settings.StickyHeader ? "pt-12" : "") min-h-screen text-white flex flex-col items-center justify-center p-6 relative z-10 overflow-x-hidden">
     <div class="w-full max-w-lg">
         <div class="flex justify-end mb-2">
-            <button @onclick="() => _settingsModal!.Open()"
+            <button @onclick="OpenSettings"
                     class="text-gray-500 hover:text-gray-300 transition-all p-2 rounded-lg"
                     title="Settings">
                 ⚙
             </button>
         </div>
 
-        <h1 class="text-4xl font-bold text-center mb-1 text-yellow-400">Peter's Party Games</h1>
-        <p class="text-center text-gray-500 mb-8 text-sm">Pick a game, grab your friends</p>
+        <h1 class="text-4xl font-bold text-center mb-1 text-yellow-400">Fireside Arcade</h1>
+        <p class="text-center text-gray-500 mb-8 text-sm">Gather around, pick a game</p>
 
         @if (!string.IsNullOrEmpty(_resumeCode))
         {
@@ -42,7 +46,7 @@
         }
     </div>
 
-<div class="relative w-[100vw] left-1/2 -translate-x-1/2 max-w-none mb-2">
+    <div class="relative w-[100vw] left-1/2 -translate-x-1/2 max-w-none mb-2">
         <GamePickerCarousel Games="_gameOptions"
                             @bind-SelectedGameId="_selectedGame"
                             @bind-FocusedGameId="_focusedGameId"
@@ -72,75 +76,27 @@
             <GameHowToPlay GameId="@_focusedGameId" />
         }
 
-        @if (ShowPartyLobby && !string.IsNullOrEmpty(_selectedGame) && _lockedGameId == null)
+        @if (_focusedGame is { ComingSoon: false, SinglePlayer: false })
         {
-            <div class="bg-gray-900 rounded-2xl p-6 mb-4">
-                <div class="flex items-baseline justify-between mb-4">
-                    <h2 class="text-lg font-semibold text-gray-300">Create a Room</h2>
-                    <span class="text-xs text-gray-500">You'll be the host</span>
-                </div>
-                <div class="space-y-3">
-                    <input
-                        @bind="_createName"
-                        @bind:event="oninput"
-                        @onkeydown="OnCreateKeyDown"
-                        placeholder="Your name"
-                        maxlength="20"
-                        class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-yellow-400" />
-                    <button
-                        @onclick="OnCreate"
-                        disabled="@(_creating || string.IsNullOrWhiteSpace(_createName))"
-                        class="w-full py-3 rounded-xl font-bold transition-all
-                               @(string.IsNullOrWhiteSpace(_createName)
-                                   ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-                                   : "bg-yellow-400 text-black hover:bg-yellow-300")">
-                        @(_creating ? "Creating…" : "Create Room")
-                    </button>
-                </div>
-                @if (!string.IsNullOrEmpty(_createError))
-                {
-                    <p class="mt-3 text-red-400 text-sm">@_createError</p>
-                }
-            </div>
-        }
-
-        @if (ShowPartyLobby)
-        {
-        <div class="bg-gray-900 rounded-2xl p-6">
-            <div class="flex items-baseline justify-between mb-4">
-                <h2 class="text-lg font-semibold text-gray-300">Join a Room</h2>
-                <span class="text-xs text-gray-500">Ask the host for the room code</span>
-            </div>
-            <div class="space-y-3">
-                <input
-                    @bind="_joinCode"
-                    @bind:event="oninput"
-                    @onkeydown="OnJoinKeyDown"
-                    placeholder="Room code (e.g. ABCD)"
-                    maxlength="4"
-                    class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 font-mono uppercase tracking-widest focus:outline-none focus:border-yellow-400" />
-                <input
-                    @bind="_joinName"
-                    @bind:event="oninput"
-                    @onkeydown="OnJoinKeyDown"
-                    placeholder="Your name"
-                    maxlength="20"
-                    class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-yellow-400" />
-                <button
-                    @onclick="OnJoin"
-                    disabled="@(_joining || string.IsNullOrWhiteSpace(_joinCode) || string.IsNullOrWhiteSpace(_joinName))"
-                    class="w-full py-3 rounded-xl font-bold transition-all
-                           @(string.IsNullOrWhiteSpace(_joinCode) || string.IsNullOrWhiteSpace(_joinName)
+            <button @onclick="OnPlayGame"
+                    disabled="@_playingGame"
+                    class="mt-4 w-full py-4 rounded-2xl font-bold text-lg transition-all active:scale-95
+                           @(_playingGame
                                ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-                               : "bg-gray-600 text-white hover:bg-gray-500")">
-                    @(_joining ? "Joining…" : "Join Room")
-                </button>
-            </div>
-            @if (!string.IsNullOrEmpty(_joinError))
-            {
-                <p class="mt-3 text-red-400 text-sm">@_joinError</p>
-            }
-        </div>
+                               : "bg-yellow-400 text-black hover:bg-yellow-300 shadow-lg shadow-yellow-400/20")">
+                @if (_playingGame)
+                {
+                    <span>Setting up room…</span>
+                }
+                else if (_roomPlayerCount >= 2)
+                {
+                    <span>🎮 Play @(_focusedGame?.Name ?? "Game") Together</span>
+                }
+                else
+                {
+                    <span>🎮 Play @(_focusedGame?.Name ?? "Game")</span>
+                }
+            </button>
         }
 
         <div class="bg-gray-900 rounded-2xl mt-4 overflow-hidden">
@@ -190,8 +146,11 @@
 @code {
     [Parameter, SupplyParameterFromQuery] public string? Error { get; set; }
     [Parameter, SupplyParameterFromQuery] public string? Join { get; set; }
+    [Parameter, SupplyParameterFromQuery] public string? Game { get; set; }
 
     private List<GamePickerCarousel.GameOption> _gameOptions = [];
+    private AppHeader? _header;
+    private SettingsModal? _settingsModal;
 
     private List<GamePickerCarousel.GameOption> BuildGameOptions()
     {
@@ -215,95 +174,97 @@
     private GamePickerCarousel.GameOption? _focusedGame =>
         _gameOptions.FirstOrDefault(g => g.Id == _focusedGameId);
 
-    private bool ShowPartyLobby =>
-        _focusedGame is { SinglePlayer: false, ComingSoon: false };
-
     private string? _lockedGameId;
-
-    private GamePickerCarousel.GameOption? _selectedGameOption =>
-        _gameOptions.FirstOrDefault(g => g.Id == _selectedGame);
 
     private string _bgStyle =>
         _focusedGame?.ImageUrl is { } img
             ? $"background-image: url('{img}')"
             : "background-image: url('/OfficeBackground.jpg')";
 
-    private bool _feedbackOpen = false;
+    private bool _feedbackOpen;
     private string _feedbackText = "";
     private bool _feedbackSubmitting;
     private bool _feedbackSubmitted;
     private string? _feedbackError;
-    private string _createName = "";
-    private string _joinCode = "";
-    private string _joinName = "";
-    private bool _creating;
-    private bool _joining;
-    private string? _createError;
-    private string? _joinError;
+
+    private bool _playingGame;
+    private int _roomPlayerCount => GameState.PlatformState?.Players.Count(p => !p.IsBot) ?? 0;
 
     private bool _themeInitialized;
-    private SettingsModal? _settingsModal;
     private string? _resumeCode;
     private string? _resumeName;
 
     protected override void OnInitialized()
     {
         _gameOptions = BuildGameOptions();
+        Hub.OnGameState += OnGameState;
     }
 
     protected override void OnParametersSet()
     {
         if (!string.IsNullOrEmpty(Join))
-            _joinCode = Join.ToUpperInvariant();
-        else
             _lockedGameId = null;
-        if (!string.IsNullOrEmpty(Error))
-            _joinError = Error;
+        if (!string.IsNullOrEmpty(Error)) { /* show in header */ }
+        if (!string.IsNullOrEmpty(Game) && _gameOptions.Any(g => g.Id == Game))
+        {
+            _selectedGame = Game;
+            _focusedGameId = Game;
+        }
+        // Propagate selected game to state so header uses it when creating
+        GameState.SelectedGameType = _selectedGame;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && !_themeInitialized)
-        {
-            _themeInitialized = true;
-            await Theme.InitializeAsync();
-            await Settings.InitializeAsync();
+        if (!firstRender && _themeInitialized) return;
+        _themeInitialized = true;
 
+        await Theme.InitializeAsync();
+        await Settings.InitializeAsync();
+
+        try
+        {
+            var code = await JS.InvokeAsync<string?>("localStorage.getItem", "sad_room");
+            var name = await JS.InvokeAsync<string?>("localStorage.getItem", "sad_name");
+            if (!string.IsNullOrEmpty(code) && !string.IsNullOrEmpty(name))
+            {
+                _resumeCode = code;
+                _resumeName = name;
+            }
+
+            // Pre-populate player name from localStorage
+            if (string.IsNullOrEmpty(GameState.PlayerName) && !string.IsNullOrEmpty(name))
+                GameState.PlayerName = name;
+        }
+        catch { }
+
+        // If a join code was passed via URL, look up the room's game type
+        if (!string.IsNullOrEmpty(Join))
+        {
             try
             {
-                var code = await JS.InvokeAsync<string?>("localStorage.getItem", "sad_room");
-                var name = await JS.InvokeAsync<string?>("localStorage.getItem", "sad_name");
-                if (!string.IsNullOrEmpty(code) && !string.IsNullOrEmpty(name))
+                var resp = await Http.GetFromJsonAsync<RoomInfoDto>($"/api/rooms/{Join.ToUpperInvariant()}/info");
+                if (resp?.GameType is { } gameType)
                 {
-                    _resumeCode = code;
-                    _resumeName = name;
-                }
-                else
-                {
-                    _resumeCode = null;
-                    _resumeName = null;
+                    _lockedGameId = gameType;
+                    _focusedGameId = gameType;
+                    _selectedGame = gameType;
                 }
             }
-            catch { /* localStorage unavailable */ }
-
-            // If a join code was passed via URL, look up the room's game type and lock the carousel.
-            if (!string.IsNullOrEmpty(Join))
-            {
-                try
-                {
-                    var resp = await Http.GetFromJsonAsync<RoomInfoDto>($"/api/rooms/{Join.ToUpperInvariant()}/info");
-                    if (resp?.GameType is { } gameType)
-                    {
-                        _lockedGameId = gameType;
-                        _focusedGameId = gameType;
-                        _selectedGame = gameType;
-                    }
-                }
-                catch { /* room not found or server error — proceed normally */ }
-            }
-
-            StateHasChanged();
+            catch { }
         }
+
+        StateHasChanged();
+    }
+
+    private async Task OnGameState(GameStateDto state)
+    {
+        GameState.UpdatePlatform(state);
+        // Auto-navigate to room when game starts
+        if (state.Phase != GamePhase.Lobby && state.Phase != GamePhase.GameOver)
+            await InvokeAsync(() => Nav.NavigateTo("/room"));
+        else
+            await InvokeAsync(StateHasChanged);
     }
 
     private record RoomInfoDto(string GameType);
@@ -315,40 +276,62 @@
         Nav.NavigateTo($"/room?action=rejoin&code={_resumeCode}");
     }
 
-    private async Task OnCreate()
+    private void OnGameTapped(string id)
     {
-        if (string.IsNullOrWhiteSpace(_createName) || string.IsNullOrEmpty(_selectedGame)) return;
-        _creating = true;
-        _createError = null;
-        await JS.InvokeVoidAsync("gameInterop.playSound", "confirm");
-        GameState.PlayerName = _createName.Trim();
-        GameState.SelectedGameType = _selectedGame;
-        Nav.NavigateTo($"/room?action=create&game={_selectedGame}");
+        GameState.SelectedGameType = id;
+        _ = JS.InvokeVoidAsync("gameInterop.peekScroll", "game-content");
     }
 
-    private async Task OnJoin()
+    private async Task OnPlayGame()
     {
-        if (string.IsNullOrWhiteSpace(_joinCode) || string.IsNullOrWhiteSpace(_joinName)) return;
-        _joining = true;
-        _joinError = null;
-        await JS.InvokeVoidAsync("gameInterop.playSound", "confirm");
-        GameState.PlayerName = _joinName.Trim();
-        Nav.NavigateTo($"/room?action=join&code={_joinCode.ToUpperInvariant()}");
-    }
+        // Restore name from localStorage if it was cleared (e.g. after returning from game over)
+        if (string.IsNullOrEmpty(GameState.PlayerName))
+        {
+            var saved = await JS.InvokeAsync<string?>("localStorage.getItem", "sad_name");
+            if (!string.IsNullOrEmpty(saved))
+                GameState.PlayerName = saved;
+            else
+            {
+                Toast.Warn("Open 'Join Friends' to set your name first.");
+                return;
+            }
+        }
 
-    private async Task OnGameTapped(string id)
-    {
-        await JS.InvokeVoidAsync("gameInterop.peekScroll", "game-content");
-    }
+        _playingGame = true;
+        StateHasChanged();
 
-    private async Task OnCreateKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter") await OnCreate();
-    }
+        try
+        {
+            var gameType = _focusedGameId;
 
-    private async Task OnJoinKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter") await OnJoin();
+            // If already in a room for this game type, just go to the lobby
+            if (GameState.PlatformState is { Phase: GamePhase.Lobby } ps && ps.GameType == gameType)
+            {
+                Nav.NavigateTo("/room");
+                return;
+            }
+
+            // Otherwise create a new room for the selected game
+            await Hub.EnsureConnectedAsync();
+            var result = await Hub.CreateOrJoinAsync(null, GameState.PlayerName, gameType, false);
+            if (result.Success)
+            {
+                await JS.InvokeVoidAsync("gameInterop.playSound", "confirm");
+                Nav.NavigateTo("/room");
+            }
+            else
+            {
+                Toast.Error(result.Error ?? "Could not create room.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast.Error(ex.Message);
+        }
+        finally
+        {
+            _playingGame = false;
+        }
     }
 
     private async Task OnSubmitFeedback()
@@ -369,5 +352,12 @@
             _feedbackError = "Could not send feedback. Please try again.";
         }
         _feedbackSubmitting = false;
+    }
+
+    private void OpenSettings() => _settingsModal?.Open();
+
+    public void Dispose()
+    {
+        Hub.OnGameState -= OnGameState;
     }
 }

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using StandupAndDeliver.Client.Components.Games.CursedVault;
 using StandupAndDeliver.Client.Components.Games.OneO;
 using StandupAndDeliver.Client.Components.Games.Standup;
 using StandupAndDeliver.Client.Services;
@@ -9,6 +10,8 @@ builder.Services.AddScoped<GameStateService>();
 builder.Services.AddScoped<SavedSessionService>();
 builder.Services.AddScoped<ThemeService>();
 builder.Services.AddScoped<SettingsService>();
+builder.Services.AddSingleton<HubService>();
+builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 
 var registry = new GameRegistry();
@@ -26,6 +29,13 @@ registry.Register(new GameRegistration(
     ImageUrl: "/OneOCover.png",
     Icon: "🃏",
     ComponentType: typeof(OneOGameRoot)));
+registry.Register(new GameRegistration(
+    Id: "cursed-vault",
+    Name: "Cursed Vault",
+    Tagline: "How much are you willing to risk for the hope of treasure?",
+    ImageUrl: "/CursedVaultCover.webp",
+    Icon: "☠️",
+    ComponentType: typeof(CursedVaultGameRoot)));
 
 builder.Services.AddSingleton(registry);
 

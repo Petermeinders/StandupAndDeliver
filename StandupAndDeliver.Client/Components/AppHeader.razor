@@ -1,0 +1,469 @@
+@inject HubService Hub
+@inject GameStateService GameState
+@inject ToastService Toast
+@inject SettingsService Settings
+@inject NavigationManager Nav
+@inject SavedSessionService SavedSession
+@inject IJSRuntime JS
+@implements IDisposable
+
+<ToastContainer />
+<ActivityLogDrawer @ref="_logDrawer" />
+
+@* ── Header bar ──────────────────────────────────────────────────────────── *@
+<header class="@HeaderClass" style="z-index:100">
+    <div class="flex items-center gap-2 px-3 h-12 max-w-3xl mx-auto w-full">
+
+        @* QR scan *@
+        <button @onclick="TriggerQrScan"
+                class="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-all shrink-0"
+                title="Scan a friend's QR code">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h6v6H3zM3 15h6v6H3zM15 3h6v6h-6z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 15h2v2h-2zM15 19h2v2h-2zM19 15h2v2h-2zM19 19h2v2h-2z"/>
+            </svg>
+        </button>
+
+        @* Join Friends / Room code button *@
+        <button @onclick="() => _joinOpen = true"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-all active:scale-95
+                       @(GameState.PlatformState is not null
+                           ? "bg-gray-700 text-white hover:bg-gray-600 font-mono tracking-wide"
+                           : "bg-yellow-400 text-black hover:bg-yellow-300")">
+            @(GameState.PlatformState?.RoomCode ?? "Start Here")
+        </button>
+
+        @* Host-left alert *@
+        @if (HostHasLeft)
+        {
+            <button @onclick="() => _hostLeftOpen = true"
+                    class="p-1 rounded-full bg-red-600 text-white text-xs font-black w-6 h-6 flex items-center justify-center shrink-0 animate-pulse"
+                    title="Host has disconnected">!</button>
+        }
+
+        <div class="flex-1" />
+
+        @* Hamburger *@
+        <div class="relative shrink-0">
+            <button @onclick="ToggleMenu"
+                    class="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-all">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
+            </button>
+
+            @if (_menuOpen)
+            {
+                <div class="fixed inset-0" style="z-index:98" @onclick="CloseMenu"></div>
+                <div class="absolute right-0 top-full mt-1 w-52 bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl overflow-hidden" style="z-index:99">
+                    <button @onclick="OpenSettings"
+                            class="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 transition-all text-left">
+                        ⚙️ Settings
+                    </button>
+                    <label class="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 cursor-pointer">
+                        <input type="checkbox" checked="@Settings.StickyHeader" @onchange="ToggleStickyHeader" class="accent-yellow-400" />
+                        Sticky header
+                    </label>
+                    <button @onclick="OpenLog"
+                            class="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 transition-all text-left">
+                        <span>📋 Activity Log</span>
+                        @if (Toast.Log.Count > 0)
+                        {
+                            <span class="text-[10px] bg-gray-700 text-gray-400 px-1.5 py-0.5 rounded-full tabular-nums">@Toast.Log.Count</span>
+                        }
+                    </button>
+                    @if (GameState.PlatformState is not null)
+                    {
+                        <div class="border-t border-gray-700 mt-1 pt-1 px-4 py-2">
+                            <button @onclick="LeaveRoom" class="text-xs text-gray-600 hover:text-red-400 transition-all">Leave room</button>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (_reconnecting)
+    {
+        <div class="bg-yellow-500 text-black text-center text-xs font-semibold py-1">Reconnecting…</div>
+    }
+</header>
+
+@* ── Join Friends modal ───────────────────────────────────────────────────── *@
+@if (_joinOpen)
+{
+    <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[110] p-4" @onclick="() => _joinOpen = false">
+        <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl" @onclick:stopPropagation>
+
+            @* Room info if already in one *@
+            @if (GameState.PlatformState is { } ps)
+            {
+                var meHost = ps.Players.Any(p => p.IsHost && p.Name == GameState.PlayerName);
+                <div class="mb-5">
+                    <div class="flex items-center justify-between mb-1">
+                        <p class="text-xs text-gray-500 uppercase tracking-widest font-semibold">Current Room</p>
+                        @if (meHost)
+                        {
+                            <span class="text-xs text-yellow-400 font-semibold">👑 Creator</span>
+                        }
+                    </div>
+                    <p class="text-2xl font-black text-white font-mono tracking-widest">@ps.RoomCode</p>
+
+                    @* QR code *@
+                    <div class="mt-3 flex justify-center">
+                        <img src="@QrCodeUrl" alt="Room QR" class="w-32 h-32 rounded-xl border border-gray-700" loading="lazy" />
+                    </div>
+                    <p class="text-[10px] text-gray-600 text-center mt-1">Friends scan this to join</p>
+
+                    @* Player list *@
+                    <div class="mt-4 space-y-1">
+                        @foreach (var p in ps.Players)
+                        {
+                            <div class="flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full shrink-0 @(p.IsConnected ? "bg-green-400" : "bg-gray-600")"></span>
+                                <span class="text-sm flex-1 @(p.IsConnected ? "text-gray-200" : "text-gray-600") @(p.IsBot ? "italic" : "")">
+                                    @p.Name
+                                </span>
+                                @if (p.IsHost) { <span class="text-yellow-400 text-xs">👑</span> }
+                                @if (p.IsBot) { <span class="text-gray-500 text-xs">🤖</span> }
+                            </div>
+                        }
+                    </div>
+
+                    @* Navigation *@
+                    @if (ps.Phase == GamePhase.Lobby)
+                    {
+                        <button @onclick="PickGame"
+                                class="mt-4 w-full py-2.5 rounded-xl bg-yellow-400 text-black text-sm font-bold hover:bg-yellow-300 active:scale-95 transition-all">
+                            🎮 Pick a game to play!
+                        </button>
+                    }
+                    else
+                    {
+                        <button @onclick="GoToGame"
+                                class="mt-4 w-full py-2.5 rounded-xl bg-gray-700 text-white text-sm font-semibold hover:bg-gray-600 transition-all">
+                            ↩ Back to Game
+                        </button>
+                    }
+
+                    <div class="border-t border-gray-800 mt-4 pt-3">
+                        <p class="text-xs text-gray-500 uppercase tracking-widest mb-2">Join a different room</p>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <h2 class="text-lg font-bold text-white mb-4">Start Here</h2>
+            }
+
+            @* Name field *@
+            @if (string.IsNullOrEmpty(GameState.PlayerName))
+            {
+                <div class="mb-3">
+                    <label class="text-xs text-gray-500 uppercase tracking-wider font-semibold block mb-1">Your name <span class="text-yellow-400 normal-case tracking-normal font-normal">Required</span></label>
+                    <input @bind="_name" @bind:event="oninput"
+                           placeholder="Enter your name"
+                           maxlength="20"
+                           class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-yellow-400" />
+                </div>
+            }
+            else
+            {
+                <p class="text-xs text-gray-500 mb-3">Playing as <span class="text-white font-semibold">@GameState.PlayerName</span></p>
+            }
+
+            @* Code input *@
+            <div class="mb-3">
+                <label class="text-xs text-gray-500 uppercase tracking-wider font-semibold block mb-1">Room code or fun name <span class="text-gray-600 normal-case tracking-normal font-normal">Optional</span></label>
+                <input @bind="_code" @bind:event="oninput"
+                       @onkeydown="OnCodeKeyDown"
+                       placeholder="e.g. ABCD or WackyOnion"
+                       maxlength="32"
+                       class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm font-mono uppercase tracking-wide placeholder-gray-600 placeholder:normal-case placeholder:tracking-normal focus:outline-none focus:border-yellow-400" />
+            </div>
+
+            @* Fun name checkbox *@
+            @if (string.IsNullOrWhiteSpace(_code))
+            {
+                <label class="flex items-center gap-2 mb-4 cursor-pointer select-none">
+                    <input type="checkbox" @bind="_useFunName" class="accent-yellow-400" />
+                    <span class="text-sm text-gray-400">Use a fun room name</span>
+                    <span class="text-gray-600 text-xs cursor-help"
+                          title="Instead of a random code like 'XKQZ', your room gets a memorable name like 'WackyOnion'. Much easier to share!">ⓘ</span>
+                </label>
+            }
+
+            <button @onclick="OnJoinClick"
+                    disabled="@(_working || (string.IsNullOrEmpty(GameState.PlayerName) && string.IsNullOrWhiteSpace(_name)))"
+                    class="w-full py-2.5 rounded-xl text-sm font-bold transition-all
+                           @(_working ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                                      : "bg-yellow-400 text-black hover:bg-yellow-300 active:scale-95")">
+                @(_working ? "Joining…" : string.IsNullOrWhiteSpace(_code) ? "Create & Join" : "Join Room")
+            </button>
+
+            <button @onclick="() => _joinOpen = false"
+                    class="w-full mt-2 py-2 rounded-xl text-xs text-gray-600 hover:text-gray-400 transition-all">
+                Cancel
+            </button>
+        </div>
+    </div>
+}
+
+@* ── Host-left prompt ─────────────────────────────────────────────────────── *@
+@if (_hostLeftOpen)
+{
+    var hostName = GameState.PlatformState?.Players.FirstOrDefault(p => p.IsHost)?.Name ?? "the host";
+    <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[120] p-4" @onclick="() => _hostLeftOpen = false">
+        <div class="bg-gray-900 border border-red-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl" @onclick:stopPropagation>
+            <div class="text-center mb-4">
+                <span class="text-3xl">👑</span>
+                <h3 class="text-lg font-bold text-white mt-2">Creator has left</h3>
+                <p class="text-sm text-gray-400 mt-1">@hostName has disconnected</p>
+            </div>
+            <div class="flex flex-col gap-2">
+                <button @onclick="TakeOverAsHost"
+                        disabled="@_promotingHost"
+                        class="w-full py-2.5 rounded-xl bg-yellow-400 text-black text-sm font-bold hover:bg-yellow-300 active:scale-95 transition-all">
+                    @(_promotingHost ? "Taking over…" : "Take over as Creator")
+                </button>
+                <button @onclick="() => _hostLeftOpen = false"
+                        class="w-full py-2 rounded-xl text-xs text-gray-500 hover:text-gray-300 transition-all">
+                    Wait for @hostName to return
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public EventCallback OnSettingsOpen { get; set; }
+
+    private ActivityLogDrawer? _logDrawer;
+    private string _code = "";
+    private string _name = "";
+    private bool _useFunName;
+    private bool _working;
+    private bool _promotingHost;
+    private bool _menuOpen;
+    private bool _reconnecting;
+    private bool _joinOpen;
+    private bool _hostLeftOpen;
+
+    private bool HostHasLeft =>
+        GameState.PlatformState is { } ps &&
+        ps.Players.Any(p => p.IsHost && !p.IsConnected && !p.IsBot) &&
+        !ps.Players.Any(p => p.IsHost && p.IsConnected && !p.IsBot) &&
+        ps.Players.Any(p => p.Name == GameState.PlayerName && !p.IsHost);
+
+    private string HeaderClass =>
+        Settings.StickyHeader
+            ? "sticky top-0 bg-gray-950/95 backdrop-blur-sm border-b border-gray-800 w-full"
+            : "relative bg-gray-950/95 border-b border-gray-800 w-full";
+
+    private string QrCodeUrl
+    {
+        get
+        {
+            var code = GameState.PlatformState?.RoomCode;
+            if (code is null) return "";
+            var joinUrl = Nav.ToAbsoluteUri($"/?join={code}").ToString();
+            return $"https://api.qrserver.com/v1/create-qr-code/?size=128x128&data={Uri.EscapeDataString(joinUrl)}";
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        Hub.OnReconnecting += OnHubReconnecting;
+        Hub.OnReconnected += OnHubReconnected;
+        Hub.OnGameState += OnGameStateReceived;
+    }
+
+    private void OnHubReconnecting()
+    {
+        _reconnecting = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnHubReconnected()
+    {
+        _reconnecting = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private GamePhase? _lastPhase;
+
+    private async Task OnGameStateReceived(GameStateDto state)
+    {
+        // Log phase transitions
+        if (_lastPhase != state.Phase)
+        {
+            if (state.Phase == GamePhase.Playing)
+                Toast.LogEvent($"Game started in room {state.RoomCode}", "Game", ToastLevel.Success);
+            else if (state.Phase == GamePhase.GameOver)
+                Toast.LogEvent($"Game over in room {state.RoomCode}", "Game");
+            _lastPhase = state.Phase;
+        }
+
+        // Auto-navigate to game room when game starts
+        if (state.Phase != GamePhase.Lobby && state.Phase != GamePhase.GameOver)
+        {
+            if (!Nav.Uri.Contains("/room"))
+                await InvokeAsync(() => Nav.NavigateTo("/room"));
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnJoinClick()
+    {
+        var playerName = string.IsNullOrWhiteSpace(GameState.PlayerName) ? _name.Trim() : GameState.PlayerName;
+        if (string.IsNullOrWhiteSpace(playerName))
+        {
+            Toast.Warn("Enter your name first.");
+            return;
+        }
+
+        _working = true;
+        StateHasChanged();
+
+        try
+        {
+            await Hub.EnsureConnectedAsync();
+            var gameType = GameState.SelectedGameType ?? "standup";
+            var result = await Hub.CreateOrJoinAsync(
+                string.IsNullOrWhiteSpace(_code) ? null : _code.Trim().ToUpperInvariant(),
+                playerName, gameType, _useFunName);
+
+            if (result.Success)
+            {
+                GameState.PlayerName = playerName;
+                await JS.InvokeVoidAsync("localStorage.setItem", "sad_name", playerName);
+                var roomCode = result.RoomCode ?? GameState.PlatformState?.RoomCode;
+                _code = "";
+                _joinOpen = false;
+                Toast.Success($"Joined room {roomCode}!");
+                Toast.LogEvent($"Joined room {roomCode} as {playerName}", "Room");
+                await JS.InvokeVoidAsync("gameInterop.playSound", "confirm");
+            }
+            else
+            {
+                Toast.Error(result.Error ?? "Failed to join.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast.Error(ex.Message);
+        }
+        finally
+        {
+            _working = false;
+        }
+    }
+
+    private async Task TriggerQrScan()
+    {
+        try
+        {
+            var result = await JS.InvokeAsync<string?>("gameInterop.scanQrCode");
+            if (!string.IsNullOrEmpty(result))
+            {
+                _code = ExtractCodeFromUrl(result) ?? result.Trim().ToUpperInvariant();
+                _joinOpen = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex) when (!ex.Message.Contains("Cancelled"))
+        {
+            Toast.Warn("QR scan requires Chrome or Edge. Type the code manually.");
+        }
+    }
+
+    private static string ExtractCodeFromUrl(string value)
+    {
+        try
+        {
+            var uri = new Uri(value);
+            foreach (var pair in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var kv = pair.Split('=');
+                if (kv.Length == 2)
+                {
+                    var key = Uri.UnescapeDataString(kv[0]).ToLowerInvariant();
+                    if (key is "join" or "code")
+                        return Uri.UnescapeDataString(kv[1]).ToUpperInvariant();
+                }
+            }
+        }
+        catch { }
+        return value.Trim().ToUpperInvariant();
+    }
+
+    private void PickGame()
+    {
+        _joinOpen = false;
+        var code = GameState.PlatformState?.RoomCode;
+        Nav.NavigateTo(code is not null ? $"/?room={code}" : "/");
+    }
+
+    private void GoToGame()
+    {
+        _joinOpen = false;
+        Nav.NavigateTo("/room");
+    }
+
+    private async Task TakeOverAsHost()
+    {
+        _promotingHost = true;
+        var result = await Hub.PromoteToHostAsync();
+        _promotingHost = false;
+        _hostLeftOpen = false;
+        if (result.Success)
+            Toast.Success("You are now the Creator!");
+        else
+            Toast.Error(result.Error ?? "Could not take over as host.");
+    }
+
+    private async Task LeaveRoom()
+    {
+        _menuOpen = false;
+        var code = GameState.PlatformState?.RoomCode;
+        if (code is not null)
+            Toast.LogEvent($"Left room {code}", "Room", ToastLevel.Warning);
+        await SavedSession.ClearAsync();
+        GameState.Clear();
+        _lastPhase = null;
+        Nav.NavigateTo("/");
+    }
+
+    private void ToggleMenu() => _menuOpen = !_menuOpen;
+    private void CloseMenu() => _menuOpen = false;
+
+    private void OpenLog()
+    {
+        _menuOpen = false;
+        _logDrawer?.Open();
+    }
+
+    private async Task OpenSettings()
+    {
+        _menuOpen = false;
+        await OnSettingsOpen.InvokeAsync();
+    }
+
+    private async Task ToggleStickyHeader(ChangeEventArgs e)
+    {
+        var v = e.Value is bool b ? b : bool.TryParse(e.Value?.ToString(), out var pv) && pv;
+        await Settings.SetStickyHeaderAsync(v);
+    }
+
+    private async Task OnCodeKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await OnJoinClick();
+    }
+
+    public void Dispose()
+    {
+        Hub.OnReconnecting -= OnHubReconnecting;
+        Hub.OnReconnected -= OnHubReconnected;
+        Hub.OnGameState -= OnGameStateReceived;
+    }
+}

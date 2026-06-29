@@ -1,0 +1,43 @@
+@* Live flip result shown to all players during a gamble. *@
+
+<div class="flex flex-col items-center gap-2 py-2">
+    <p class="text-xs text-gray-500">
+        <span class="text-white font-semibold">@Gamble.PlayerName</span> declared @Gamble.Declared —
+        flip @(Gamble.FlipsSoFar) of @Gamble.Declared
+    </p>
+
+    @if (Gamble.LastFlippedCard == "Skull")
+    {
+        <div class="flex flex-col items-center gap-2 animate-pulse">
+            <div class="w-16 h-22 rounded-xl overflow-hidden ring-4 ring-red-500 shadow-[0_0_20px_rgba(239,68,68,0.6)]">
+                <img src="/games/cursed-vault/skull.webp" alt="Skull" class="w-full h-full object-cover" />
+            </div>
+            <span class="text-red-400 font-black text-sm tracking-wide">☠ SKULL HIT!</span>
+        </div>
+    }
+    else if (Gamble.LastFlippedCard == "Gold")
+    {
+        <div class="flex flex-col items-center gap-2">
+            <div class="w-16 rounded-xl overflow-hidden ring-2 ring-yellow-400 shadow-[0_0_12px_rgba(251,191,36,0.4)]">
+                <img src="/games/cursed-vault/coin.webp" alt="Gold" class="w-full h-full object-cover" />
+            </div>
+            <span class="text-yellow-400 font-bold text-sm">🪙 Gold! (@Gamble.GoldCollectedSoFar collected)</span>
+        </div>
+    }
+    else
+    {
+        <div class="flex flex-col items-center gap-2 opacity-60">
+            <div class="w-16 rounded-xl overflow-hidden ring-1 ring-gray-700">
+                <img src="/games/cursed-vault/back.webp" alt="?" class="w-full h-full object-cover" />
+            </div>
+            <span class="text-gray-500 text-xs">
+                @(IsMyTurn ? "Press Flip to reveal…" : "Waiting for flip…")
+            </span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ActiveGambleDto Gamble { get; set; } = default!;
+    [Parameter, EditorRequired] public bool IsMyTurn { get; set; }
+}

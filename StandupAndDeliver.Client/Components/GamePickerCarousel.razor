@@ -82,7 +82,7 @@
                 disabled="@(_focusedIndex == 0 || LockedToGameId != null)"
                 @onclick="() => Shift(-1)"
                 aria-label="Previous game">
-            ‹
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:1.1em;height:1.1em;display:block"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
         <div class="game-carousel-dots" role="tablist" aria-label="Games">
             @for (var i = 0; i < Games.Count; i++)
@@ -107,7 +107,7 @@
                 disabled="@(_focusedIndex >= Games.Count - 1 || LockedToGameId != null)"
                 @onclick="() => Shift(1)"
                 aria-label="Next game">
-            ›
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:1.1em;height:1.1em;display:block"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
     </div>
 </div>
@@ -142,9 +142,11 @@
     private bool _dragging;
     private bool _fromSwipe;
     private double _pointerStartX;
+    private double _pointerStartY;
     private double _dragStartOffset;
 
     private int _focusedIndex;
+    private int _primedIndex = -1;
 
     protected override void OnParametersSet()
     {
@@ -181,6 +183,8 @@ if (!string.IsNullOrEmpty(FocusedGameId))
         if (index < 0 || index >= Games.Count) return;
         var game = Games[index];
         if (LockedToGameId != null && game.Id != LockedToGameId) return;
+
+        bool wasAlreadyFocused = index == _focusedIndex;
         await JS.InvokeVoidAsync("gameInterop.playSound", "menu");
         await SetFocus(index);
 
@@ -190,8 +194,22 @@ if (!string.IsNullOrEmpty(FocusedGameId))
             await SelectedGameIdChanged.InvokeAsync(game.Id);
         }
 
-        if (!_fromSwipe)
+        // Swipes never navigate the page
+        if (_fromSwipe) { _primedIndex = -1; return; }
+
+        // Non-focused card: just focus it, reset primed state
+        if (!wasAlreadyFocused) { _primedIndex = -1; return; }
+
+        // Already focused: first click primes, second click navigates
+        if (_primedIndex == index)
+        {
+            _primedIndex = -1;
             await OnTapped.InvokeAsync(game.Id);
+        }
+        else
+        {
+            _primedIndex = index;
+        }
     }
 
     private async Task SetFocus(int index)
@@ -205,24 +223,39 @@ if (!string.IsNullOrEmpty(FocusedGameId))
         }
     }
 
+    // Arrows only change focus — never prime or navigate the page
     private async Task Shift(int delta)
     {
         var next = _focusedIndex + delta;
         if (next < 0 || next >= Games.Count) return;
-        await OnCardClick(next);
+        _primedIndex = -1;
+        await JS.InvokeVoidAsync("gameInterop.playSound", "menu");
+        await SetFocus(next);
+        var game = Games[next];
+        if (!game.ComingSoon && !game.SinglePlayer && game.Id != SelectedGameId)
+        {
+            SelectedGameId = game.Id;
+            await SelectedGameIdChanged.InvokeAsync(game.Id);
+        }
     }
 
     private void OnPointerDown(PointerEventArgs e)
     {
         _dragging = true;
         _pointerStartX = e.ClientX;
+        _pointerStartY = e.ClientY;
         _dragStartOffset = _dragOffset;
+        _fromSwipe = false;
     }
 
     private void OnPointerMove(PointerEventArgs e)
     {
         if (!_dragging) return;
-        _dragOffset = _dragStartOffset + (e.ClientX - _pointerStartX);
+        var deltaX = e.ClientX - _pointerStartX;
+        var deltaY = e.ClientY - _pointerStartY;
+        // Only drag horizontally if the gesture is more horizontal than vertical
+        if (Math.Abs(deltaX) > Math.Abs(deltaY))
+            _dragOffset = _dragStartOffset + deltaX;
     }
 
     private async Task OnPointerUp(PointerEventArgs e)
@@ -230,13 +263,22 @@ if (!string.IsNullOrEmpty(FocusedGameId))
         if (!_dragging) return;
         _dragging = false;
 
-        var delta = e.ClientX - _pointerStartX;
+        var deltaX = e.ClientX - _pointerStartX;
+        var deltaY = e.ClientY - _pointerStartY;
         const double threshold = 48;
 
-        if (Math.Abs(delta) >= threshold)
+        // Vertical scroll: suppress click
+        if (Math.Abs(deltaY) > Math.Abs(deltaX) && Math.Abs(deltaY) > 10)
         {
             _fromSwipe = true;
-            await Shift(delta < 0 ? 1 : -1);
+            _dragOffset = 0;
+            return;
+        }
+
+        if (Math.Abs(deltaX) >= threshold)
+        {
+            _fromSwipe = true;
+            await Shift(deltaX < 0 ? 1 : -1);
             _fromSwipe = false;
         }
 

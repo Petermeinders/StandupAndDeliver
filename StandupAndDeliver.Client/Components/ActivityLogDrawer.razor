@@ -1,0 +1,93 @@
+@inject ToastService Toast
+@implements IDisposable
+
+@if (_open)
+{
+    @* Backdrop *@
+    <div class="fixed inset-0 bg-black/60 z-[130]" @onclick="Close"></div>
+
+    @* Slide-in panel from right *@
+    <div class="fixed top-0 right-0 h-full w-full max-w-sm bg-gray-950 border-l border-gray-800 z-[131] flex flex-col shadow-2xl">
+
+        @* Header *@
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
+            <h2 class="text-base font-bold text-white">Activity Log</h2>
+            <div class="flex items-center gap-3">
+                @if (Toast.Log.Count > 0)
+                {
+                    <button @onclick="Toast.ClearLog"
+                            class="text-xs text-gray-600 hover:text-gray-400 transition-all">
+                        Clear
+                    </button>
+                }
+                <button @onclick="Close"
+                        class="text-gray-500 hover:text-white transition-all text-lg leading-none">✕</button>
+            </div>
+        </div>
+
+        @* Log entries *@
+        <div class="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+            @if (Toast.Log.Count == 0)
+            {
+                <div class="text-center text-gray-600 text-sm mt-12">
+                    <p class="text-2xl mb-2">📋</p>
+                    <p>No activity yet.</p>
+                    <p class="text-xs mt-1">Room joins, game events, and alerts will appear here.</p>
+                </div>
+            }
+            else
+            {
+                @foreach (var entry in Toast.Log)
+                {
+                    <div class="flex gap-3 items-start py-2 border-b border-gray-900">
+                        <span class="text-base shrink-0 mt-0.5">@LevelIcon(entry.Level)</span>
+                        <div class="flex-1 min-w-0">
+                            @if (!string.IsNullOrEmpty(entry.Category))
+                            {
+                                <p class="text-[10px] text-gray-600 uppercase tracking-widest font-semibold mb-0.5">@entry.Category</p>
+                            }
+                            <p class="text-sm @LevelTextClass(entry.Level) leading-snug">@entry.Text</p>
+                        </div>
+                        <span class="text-[10px] text-gray-700 shrink-0 mt-0.5 tabular-nums">@entry.At.ToString("h:mm tt")</span>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private bool _open;
+
+    public void Open()
+    {
+        _open = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Close()
+    {
+        _open = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    protected override void OnInitialized() => Toast.OnLogChange += Refresh;
+    public void Dispose() => Toast.OnLogChange -= Refresh;
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    private static string LevelIcon(ToastLevel level) => level switch
+    {
+        ToastLevel.Success => "✅",
+        ToastLevel.Warning => "⚠️",
+        ToastLevel.Error   => "❌",
+        _                  => "ℹ️",
+    };
+
+    private static string LevelTextClass(ToastLevel level) => level switch
+    {
+        ToastLevel.Success => "text-green-300",
+        ToastLevel.Warning => "text-yellow-300",
+        ToastLevel.Error   => "text-red-300",
+        _                  => "text-gray-300",
+    };
+}

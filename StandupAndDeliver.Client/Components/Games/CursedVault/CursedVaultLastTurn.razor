@@ -1,0 +1,19 @@
+@{
+    var (icon, msg, color) = Summary.Action switch
+    {
+        "PlayedGold"     => ("🪙", $"{Summary.PlayerName} played gold", "text-gray-400"),
+        "PlayedSkull"    => ("☠️", $"{Summary.PlayerName} played their skull!", "text-purple-400"),
+        "GambledSuccess" => ("✨", $"{Summary.PlayerName} grabbed {Summary.GoldGained} gold", "text-green-400"),
+        "GambledSkullHit" when Summary.Eliminated
+                         => ("💀", $"{Summary.PlayerName} eliminated!", "text-red-400"),
+        "GambledSkullHit" => ("☠️", $"{Summary.PlayerName} lost their skull", "text-red-400"),
+        "Skipped"        => ("⏭", $"{Summary.PlayerName} skipped", "text-gray-500"),
+        _                => ("", "", "text-gray-500")
+    };
+}
+
+<span class="@color text-xs font-semibold">@icon @msg</span>
+
+@code {
+    [Parameter, EditorRequired] public CursedVaultLastTurnDto Summary { get; set; } = default!;
+}

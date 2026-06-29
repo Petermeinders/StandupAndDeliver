@@ -7,4 +7,5 @@ public class Player
     public bool IsHost { get; set; }
     public bool IsConnected { get; set; } = true;
     public int Score { get; set; }
+    public bool IsBot { get; set; }
 }

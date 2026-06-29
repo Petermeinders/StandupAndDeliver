@@ -1,5 +1,7 @@
 @inject GameStateService GameState
 @inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject SavedSessionService SavedSession
 
 @{
     var oneOState = GameState.GetState<OneOGameStateDto>("OneO");
@@ -29,7 +31,10 @@
                     </div>
                 }
             </div>
-            <LeaveGameButton />
+            <button @onclick="GoToMenu"
+                    class="mt-2 px-6 py-3 bg-gray-800 hover:bg-gray-700 active:scale-95 text-white font-semibold rounded-xl transition-all shadow-lg text-sm border border-gray-700">
+                ← Back to Main Menu
+            </button>
         </div>
     }
     else
@@ -83,5 +88,12 @@
             _gameOverSoundPlayed = true;
             await JS.InvokeVoidAsync("gameInterop.playSound", "levelup");
         }
+    }
+
+    private async Task GoToMenu()
+    {
+        await SavedSession.ClearAsync();
+        GameState.Clear();
+        Nav.NavigateTo("/?game=OneO");
     }
 }
