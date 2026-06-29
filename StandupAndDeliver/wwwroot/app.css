@@ -47,6 +47,10 @@ h1:focus {
         content: "An error has occurred."
     }
 
+.justify-center {
+    justify-content: flex-start;
+}
+
 .darker-border-checkbox.form-check-input {
     border-color: #929292;
 }
