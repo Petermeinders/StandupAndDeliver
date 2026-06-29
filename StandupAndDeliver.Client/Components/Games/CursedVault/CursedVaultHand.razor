@@ -1,48 +1,47 @@
-<div class="bg-gray-900/80 rounded-2xl p-3 border border-gray-800">
-    <div class="flex items-center justify-between mb-2">
+<div class="bg-gray-900/80 rounded-2xl p-3 md:p-5 border border-gray-800 flex-shrink-0">
+    <div class="flex items-center justify-between mb-3">
         <p class="text-xs text-gray-500 uppercase tracking-widest font-semibold">Your Hand</p>
-        <div class="flex items-center gap-1">
-            @* Win progress bar *@
-            <div class="w-24 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+        <div class="flex items-center gap-2">
+            <div class="w-28 md:w-40 h-1.5 bg-gray-800 rounded-full overflow-hidden">
                 <div class="h-full bg-yellow-400 rounded-full transition-all duration-500"
                      style="width: @(Math.Min(MyGold * 10, 100))%"></div>
             </div>
-            <span class="text-[10px] text-gray-500 ml-1">@MyGold/10</span>
+            <span class="text-[10px] md:text-xs text-gray-500">@MyGold/10</span>
         </div>
     </div>
 
-    <div class="flex flex-wrap gap-2 items-end">
-        @* Gold cards — show as small card images, cap display at 10 *@
+    <div class="flex flex-wrap gap-2 md:gap-3 items-end">
+        @* Gold cards — cap display at 10 *@
         @for (int i = 0; i < Math.Min(MyGold, 10); i++)
         {
-            <div class="w-10 h-14 rounded-lg overflow-hidden shadow-md ring-1 ring-yellow-600/40">
+            <div class="w-12 h-16 md:w-16 md:h-22 lg:w-20 lg:h-28 rounded-lg overflow-hidden shadow-md ring-1 ring-yellow-600/40">
                 <img src="/games/cursed-vault/coin.webp" alt="Gold" class="w-full h-full object-cover" />
             </div>
         }
         @if (MyGold > 10)
         {
-            <div class="w-10 h-14 rounded-lg bg-gray-800 border border-yellow-600/40 flex items-center justify-center">
+            <div class="w-12 h-16 md:w-16 md:h-22 rounded-lg bg-gray-800 border border-yellow-600/40 flex items-center justify-center">
                 <span class="text-yellow-400 font-bold text-xs">+@(MyGold - 10)</span>
             </div>
         }
 
-        @* Skull card — only visible to this player *@
+        @* Skull card *@
         @if (MyHasSkull)
         {
-            <div class="w-10 h-14 rounded-lg overflow-hidden shadow-md ring-1 ring-purple-500/60 ml-1">
+            <div class="w-12 h-16 md:w-16 md:h-22 lg:w-20 lg:h-28 rounded-lg overflow-hidden shadow-md ring-2 ring-purple-500/60 ml-1">
                 <img src="/games/cursed-vault/skull.webp" alt="Skull" class="w-full h-full object-cover" />
             </div>
         }
         else
         {
-            <div class="w-10 h-14 rounded-lg border border-dashed border-gray-700 flex items-center justify-center ml-1" title="You have no skull">
-                <span class="text-gray-700 text-lg">☠</span>
+            <div class="w-12 h-16 md:w-16 md:h-22 rounded-lg border border-dashed border-gray-700 flex items-center justify-center ml-1" title="You have no skull">
+                <span class="text-gray-700 text-lg md:text-2xl">☠</span>
             </div>
         }
 
         @if (MyGold == 0 && !MyHasSkull)
         {
-            <span class="text-gray-600 text-sm italic">Empty hand</span>
+            <span class="text-gray-600 text-sm italic self-center">Empty hand</span>
         }
     </div>
 </div>

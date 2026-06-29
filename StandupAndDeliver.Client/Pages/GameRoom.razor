@@ -184,6 +184,17 @@ else
                 RegisterVisibility();
                 return;
             }
+            else if (Action is null)
+            {
+                // Page was refreshed — try to restore session from localStorage
+                var savedRoom = await JS.InvokeAsync<string?>("localStorage.getItem", "sad_room");
+                if (string.IsNullOrEmpty(savedRoom))
+                {
+                    Nav.NavigateTo("/");
+                    return;
+                }
+                result = await Hub.RejoinAsync(savedRoom, GameState.PlayerName);
+            }
             else
             {
                 _fatalError = "Invalid room action.";

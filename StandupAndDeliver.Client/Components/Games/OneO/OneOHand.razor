@@ -5,30 +5,33 @@
     var oneOState = GameState.GetState<OneOGameStateDto>("OneO");
 }
 
-<div class="bg-gray-900 rounded-2xl p-4">
-    <p class="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-3">Your Hand (@(oneOState?.MyHand.Count ?? 0) cards)</p>
+<div class="bg-gray-900/80 rounded-2xl p-3 md:p-5 border border-gray-800">
+    <p class="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-3">
+        Your Hand <span class="text-gray-600">(@(oneOState?.MyHand.Count ?? 0) cards)</span>
+    </p>
 
     @if (oneOState is null || oneOState.MyHand.Count == 0)
     {
-        <p class="text-gray-600 text-sm text-center py-4">No cards</p>
+        <p class="text-gray-600 text-sm text-center py-6">No cards</p>
     }
     else
     {
-        <div class="flex flex-wrap gap-2">
+        @* On desktop fan cards with slight overlap for a hand feel *@
+        <div class="flex flex-wrap md:flex-nowrap gap-1.5 md:gap-0 md:overflow-x-auto md:pb-2 items-end">
             @foreach (var card in oneOState.MyHand)
             {
                 var canPlay = IsMyTurn && CanPlay(card, oneOState);
                 <button @onclick="() => OnPlayCard(card)"
                         disabled="@(!canPlay)"
                         style="@CardBgStyle(card.Color)"
-                        class="w-14 h-20 rounded-xl border-2 bg-cover bg-center flex flex-col items-center justify-center relative transition-all select-none
+                        class="flex-shrink-0 w-16 h-24 md:w-20 md:h-28 lg:w-24 lg:h-36 rounded-xl border-2 flex flex-col items-center justify-center relative transition-all select-none md:-ml-3 first:ml-0
                                @CardBorderColor(card.Color)
                                @(canPlay
-                                   ? "hover:scale-110 hover:-translate-y-1 cursor-pointer shadow-lg"
-                                   : "opacity-60 cursor-not-allowed")">
-                    <span class="absolute top-1 left-1.5 text-[9px] font-black text-white leading-none drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">@CardLabel(card)</span>
-                    <span class="text-white text-2xl font-black leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">@CardLabel(card)</span>
-                    <span class="absolute bottom-1 right-1.5 text-[9px] font-black text-white leading-none rotate-180 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">@CardLabel(card)</span>
+                                   ? "hover:scale-110 hover:-translate-y-3 hover:z-10 hover:shadow-xl cursor-pointer shadow-md"
+                                   : "opacity-50 cursor-not-allowed")">
+                    <span class="absolute top-1.5 left-2 text-[10px] md:text-xs font-black text-white leading-none drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">@CardLabel(card)</span>
+                    <span class="text-white text-2xl md:text-3xl lg:text-4xl font-black leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">@CardLabel(card)</span>
+                    <span class="absolute bottom-1.5 right-2 text-[10px] md:text-xs font-black text-white leading-none rotate-180 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">@CardLabel(card)</span>
                 </button>
             }
         </div>
@@ -36,14 +39,14 @@
 
     @if (_showColorPicker && _pendingWildCard is not null)
     {
-        <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-            <div class="bg-gray-900 rounded-2xl p-6 flex flex-col items-center gap-4">
-                <p class="text-white font-semibold">Choose a color</p>
-                <div class="flex gap-4">
+        <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+            <div class="bg-gray-900 rounded-2xl p-8 flex flex-col items-center gap-5 border border-gray-700 shadow-2xl">
+                <p class="text-white font-semibold text-lg">Choose a color</p>
+                <div class="flex gap-5">
                     @foreach (var color in new[] { "Red", "Green", "Blue", "Yellow" })
                     {
                         <button @onclick="() => OnWildColorChosen(color)"
-                                class="w-12 h-12 rounded-full hover:scale-110 transition-all @WildBtnColor(color)">
+                                class="w-16 h-16 md:w-20 md:h-20 rounded-2xl hover:scale-110 transition-all shadow-lg @WildBtnColor(color)">
                         </button>
                     }
                 </div>

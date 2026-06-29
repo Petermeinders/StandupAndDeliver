@@ -17,11 +17,11 @@
     return;
 }
 
-<div class="flex flex-col h-full min-h-0 gap-3 px-2 py-3 select-none">
+<div class="flex flex-col min-h-screen gap-3 px-3 py-3 md:px-6 md:py-4 select-none max-w-screen-2xl mx-auto w-full">
 
-    @* ── Round badge + leave ── *@
-    <div class="flex items-center justify-between text-xs text-gray-500 px-1">
-        <span class="uppercase tracking-widest font-semibold">Round @gs.Round</span>
+    @* ── Header: Round + last turn + leave ── *@
+    <div class="flex items-center justify-between text-xs text-gray-500 px-1 flex-shrink-0">
+        <span class="uppercase tracking-widest font-semibold text-sm md:text-base text-gray-400">Round @gs.Round</span>
         @if (gs.LastTurnSummary is not null)
         {
             <CursedVaultLastTurn Summary="gs.LastTurnSummary" />
@@ -29,28 +29,34 @@
         <LeaveGameButton />
     </div>
 
-    @* ── Roundtable player ring ── *@
+    @* ── Player ring — always at top, horizontal ── *@
     <CursedVaultPlayerList Players="gs.Players" />
 
-    @* ── Center pile + flip feed ── *@
-    <div class="flex flex-col items-center gap-2">
-        <CursedVaultPile PileCount="gs.PileCount" IsMyTurn="gs.IsMyTurn" PileShuffled="gs.PileShuffled" />
-        @if (gs.ActiveGamble is not null)
-        {
-            <CursedVaultFlipFeed Gamble="gs.ActiveGamble" IsMyTurn="gs.IsMyTurn" />
-        }
+    @* ── Desktop: pile + action side-by-side. Mobile: stacked. ── *@
+    <div class="flex flex-col md:flex-row gap-3 md:gap-6 flex-1 items-start md:items-stretch justify-center">
+
+        @* ── Center pile + flip feed ── *@
+        <div class="flex flex-col items-center gap-3 flex-shrink-0 md:self-center">
+            <CursedVaultPile PileCount="gs.PileCount" IsMyTurn="gs.IsMyTurn" PileShuffled="gs.PileShuffled" />
+            @if (gs.ActiveGamble is not null)
+            {
+                <CursedVaultFlipFeed Gamble="gs.ActiveGamble" IsMyTurn="gs.IsMyTurn" />
+            }
+        </div>
+
+        @* ── Action panel ── *@
+        <div class="flex-1 md:max-w-md">
+            <CursedVaultActionPanel
+                State="gs"
+                OnPlayCard="PlayCard"
+                OnStartGamble="StartGamble"
+                OnFlipCard="FlipCard"
+                OnPlayCardAfterGamble="PlayCardAfterGamble" />
+        </div>
     </div>
 
-    @* ── Your hand ── *@
+    @* ── Your hand — always at bottom ── *@
     <CursedVaultHand MyGold="gs.MyGold" MyHasSkull="gs.MyHasSkull" />
-
-    @* ── Action panel ── *@
-    <CursedVaultActionPanel
-        State="gs"
-        OnPlayCard="PlayCard"
-        OnStartGamble="StartGamble"
-        OnFlipCard="FlipCard"
-        OnPlayCardAfterGamble="PlayCardAfterGamble" />
 
 </div>
 

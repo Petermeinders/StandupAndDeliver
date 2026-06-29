@@ -25,13 +25,24 @@
             </svg>
         </button>
 
-        @* Join Friends / Room code button *@
+        @* Start Here / Friends / Room code button *@
         <button @onclick="() => _joinOpen = true"
                 class="px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-all active:scale-95
                        @(GameState.PlatformState is not null
                            ? "bg-gray-700 text-white hover:bg-gray-600 font-mono tracking-wide"
                            : "bg-yellow-400 text-black hover:bg-yellow-300")">
-            @(GameState.PlatformState?.RoomCode ?? "Start Here")
+            @if (GameState.PlatformState?.RoomCode is { } rc)
+            {
+                @rc
+            }
+            else if (!string.IsNullOrEmpty(GameState.PlayerName))
+            {
+                <text>Friends</text>
+            }
+            else
+            {
+                <text>Start Here</text>
+            }
         </button>
 
         @* Host-left alert *@
@@ -155,64 +166,105 @@
                     }
 
                     <div class="border-t border-gray-800 mt-4 pt-3">
-                        <p class="text-xs text-gray-500 uppercase tracking-widest mb-2">Join a different room</p>
+                        <p class="text-xs text-gray-500 uppercase tracking-widest mb-3">Join a different room</p>
+                        <input @bind="_code" @bind:event="oninput"
+                               @onkeydown="OnJoinKeyDown"
+                               placeholder="Room code or fun name"
+                               maxlength="32"
+                               class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm font-mono uppercase tracking-wide placeholder-gray-600 placeholder:normal-case placeholder:tracking-normal focus:outline-none focus:border-yellow-400 mb-3" />
+                        <button @onclick="OnJoinClick"
+                                disabled="@(_joining || string.IsNullOrWhiteSpace(_code))"
+                                class="w-full py-2.5 rounded-xl text-sm font-bold transition-all
+                                       @(_joining ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                                                  : string.IsNullOrWhiteSpace(_code)
+                                                      ? "bg-gray-800 text-gray-600 cursor-not-allowed"
+                                                      : "bg-gray-700 text-white hover:bg-gray-600 active:scale-95")">
+                            @(_joining ? "Joining…" : "Join Room")
+                        </button>
                     </div>
                 </div>
             }
-            else
+            else if (string.IsNullOrEmpty(GameState.PlayerName))
             {
+                @* ── No name yet: prompt for name first ── *@
                 <h2 class="text-lg font-bold text-white mb-4">Start Here</h2>
-            }
 
-            @* Name field *@
-            @if (string.IsNullOrEmpty(GameState.PlayerName))
-            {
-                <div class="mb-3">
+                <div class="mb-4">
                     <label class="text-xs text-gray-500 uppercase tracking-wider font-semibold block mb-1">Your name <span class="text-yellow-400 normal-case tracking-normal font-normal">Required</span></label>
                     <input @bind="_name" @bind:event="oninput"
                            placeholder="Enter your name"
                            maxlength="20"
                            class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-yellow-400" />
                 </div>
+
+                <button @onclick="OnCreateClick"
+                        disabled="@(_creating || string.IsNullOrWhiteSpace(_name))"
+                        class="w-full py-2.5 rounded-xl text-sm font-bold transition-all
+                               @(_creating ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                                           : "bg-yellow-400 text-black hover:bg-yellow-300 active:scale-95")">
+                    @(_creating ? "Creating…" : "Create Room")
+                </button>
+
+                <button @onclick="() => _joinOpen = false"
+                        class="w-full mt-2 py-2 rounded-xl text-xs text-gray-600 hover:text-gray-400 transition-all">
+                    Cancel
+                </button>
             }
             else
             {
-                <p class="text-xs text-gray-500 mb-3">Playing as <span class="text-white font-semibold">@GameState.PlayerName</span></p>
-            }
+                @* ── Has name, no room: split Create / Join ── *@
+                <h2 class="text-lg font-bold text-white mb-1">Create Room or Join Friends</h2>
+                <p class="text-xs text-gray-500 mb-5">Playing as <span class="text-white font-semibold">@GameState.PlayerName</span></p>
 
-            @* Code input *@
-            <div class="mb-3">
-                <label class="text-xs text-gray-500 uppercase tracking-wider font-semibold block mb-1">Room code or fun name <span class="text-gray-600 normal-case tracking-normal font-normal">Optional</span></label>
-                <input @bind="_code" @bind:event="oninput"
-                       @onkeydown="OnCodeKeyDown"
-                       placeholder="e.g. ABCD or WackyOnion"
-                       maxlength="32"
-                       class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm font-mono uppercase tracking-wide placeholder-gray-600 placeholder:normal-case placeholder:tracking-normal focus:outline-none focus:border-yellow-400" />
-            </div>
+                @* Create section *@
+                <button @onclick="OnCreateClick"
+                        disabled="@_creating"
+                        class="w-full py-3 rounded-xl text-sm font-bold transition-all mb-5
+                               @(_creating ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                                           : "bg-yellow-400 text-black hover:bg-yellow-300 active:scale-95")">
+                    @(_creating ? "Creating…" : "Create Room")
+                </button>
 
-            @* Fun name checkbox *@
-            @if (string.IsNullOrWhiteSpace(_code))
-            {
+                @* Divider *@
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="flex-1 h-px bg-gray-700"></div>
+                    <span class="text-xs text-gray-600 uppercase tracking-widest">or join</span>
+                    <div class="flex-1 h-px bg-gray-700"></div>
+                </div>
+
+                @* Join section *@
+                <div class="mb-3">
+                    <label class="text-xs text-gray-500 uppercase tracking-wider font-semibold block mb-1">Room Code or Fun Name</label>
+                    <input @bind="_code" @bind:event="oninput"
+                           @onkeydown="OnJoinKeyDown"
+                           placeholder="e.g. ABCD or WackyOnion"
+                           maxlength="32"
+                           class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm font-mono uppercase tracking-wide placeholder-gray-600 placeholder:normal-case placeholder:tracking-normal focus:outline-none focus:border-yellow-400" />
+                </div>
+
                 <label class="flex items-center gap-2 mb-4 cursor-pointer select-none">
                     <input type="checkbox" @bind="_useFunName" class="accent-yellow-400" />
                     <span class="text-sm text-gray-400">Use a fun room name</span>
                     <span class="text-gray-600 text-xs cursor-help"
                           title="Instead of a random code like 'XKQZ', your room gets a memorable name like 'WackyOnion'. Much easier to share!">ⓘ</span>
                 </label>
+
+                <button @onclick="OnJoinClick"
+                        disabled="@(_joining || string.IsNullOrWhiteSpace(_code))"
+                        class="w-full py-2.5 rounded-xl text-sm font-bold transition-all
+                               @(_joining ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                                          : string.IsNullOrWhiteSpace(_code)
+                                              ? "bg-gray-800 text-gray-600 cursor-not-allowed"
+                                              : "bg-gray-700 text-white hover:bg-gray-600 active:scale-95")">
+                    @(_joining ? "Joining…" : "Join Room")
+                </button>
+
+                <button @onclick="() => _joinOpen = false"
+                        class="w-full mt-2 py-2 rounded-xl text-xs text-gray-600 hover:text-gray-400 transition-all">
+                    Cancel
+                </button>
             }
 
-            <button @onclick="OnJoinClick"
-                    disabled="@(_working || (string.IsNullOrEmpty(GameState.PlayerName) && string.IsNullOrWhiteSpace(_name)))"
-                    class="w-full py-2.5 rounded-xl text-sm font-bold transition-all
-                           @(_working ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-                                      : "bg-yellow-400 text-black hover:bg-yellow-300 active:scale-95")">
-                @(_working ? "Joining…" : string.IsNullOrWhiteSpace(_code) ? "Create & Join" : "Join Room")
-            </button>
-
-            <button @onclick="() => _joinOpen = false"
-                    class="w-full mt-2 py-2 rounded-xl text-xs text-gray-600 hover:text-gray-400 transition-all">
-                Cancel
-            </button>
         </div>
     </div>
 }
@@ -286,7 +338,8 @@
     private string _code = "";
     private string _name = "";
     private bool _useFunName;
-    private bool _working;
+    private bool _creating;
+    private bool _joining;
     private bool _promotingHost;
     private bool _menuOpen;
     private bool _reconnecting;
@@ -358,30 +411,49 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task OnJoinClick()
+    private async Task OnCreateClick()
     {
         var playerName = string.IsNullOrWhiteSpace(GameState.PlayerName) ? _name.Trim() : GameState.PlayerName;
-        if (string.IsNullOrWhiteSpace(playerName))
-        {
-            Toast.Warn("Enter your name first.");
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(playerName)) { Toast.Warn("Enter your name first."); return; }
 
-        _working = true;
+        _creating = true;
         StateHasChanged();
-
         try
         {
             await Hub.EnsureConnectedAsync();
             var gameType = GameState.SelectedGameType ?? "standup";
-            var result = await Hub.CreateOrJoinAsync(
-                string.IsNullOrWhiteSpace(_code) ? null : _code.Trim().ToUpperInvariant(),
-                playerName, gameType, _useFunName);
-
+            var result = await Hub.CreateOrJoinAsync(null, playerName, gameType, _useFunName);
             if (result.Success)
             {
                 GameState.PlayerName = playerName;
                 await JS.InvokeVoidAsync("localStorage.setItem", "sad_name", playerName);
+                var roomCode = result.RoomCode ?? GameState.PlatformState?.RoomCode;
+                _joinOpen = false;
+                Toast.Success($"Created room {roomCode}!");
+                Toast.LogEvent($"Created room {roomCode} as {playerName}", "Room");
+                await JS.InvokeVoidAsync("gameInterop.playSound", "confirm");
+            }
+            else { Toast.Error(result.Error ?? "Failed to create room."); }
+        }
+        catch (Exception ex) { Toast.Error(ex.Message); }
+        finally { _creating = false; }
+    }
+
+    private async Task OnJoinClick()
+    {
+        var playerName = GameState.PlayerName;
+        if (string.IsNullOrWhiteSpace(playerName)) { Toast.Warn("Enter your name first."); return; }
+        if (string.IsNullOrWhiteSpace(_code)) { Toast.Warn("Enter a room code or fun name."); return; }
+
+        _joining = true;
+        StateHasChanged();
+        try
+        {
+            await Hub.EnsureConnectedAsync();
+            var gameType = GameState.SelectedGameType ?? "standup";
+            var result = await Hub.CreateOrJoinAsync(_code.Trim().ToUpperInvariant(), playerName, gameType, false);
+            if (result.Success)
+            {
                 var roomCode = result.RoomCode ?? GameState.PlatformState?.RoomCode;
                 _code = "";
                 _joinOpen = false;
@@ -389,19 +461,10 @@
                 Toast.LogEvent($"Joined room {roomCode} as {playerName}", "Room");
                 await JS.InvokeVoidAsync("gameInterop.playSound", "confirm");
             }
-            else
-            {
-                Toast.Error(result.Error ?? "Failed to join.");
-            }
+            else { Toast.Error(result.Error ?? "Failed to join."); }
         }
-        catch (Exception ex)
-        {
-            Toast.Error(ex.Message);
-        }
-        finally
-        {
-            _working = false;
-        }
+        catch (Exception ex) { Toast.Error(ex.Message); }
+        finally { _joining = false; }
     }
 
     private async Task TriggerQrScan()
@@ -516,7 +579,7 @@
         await Settings.SetStickyHeaderAsync(v);
     }
 
-    private async Task OnCodeKeyDown(KeyboardEventArgs e)
+    private async Task OnJoinKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Enter") await OnJoinClick();
     }

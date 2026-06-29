@@ -8,7 +8,7 @@
     var oneOState = GameState.GetState<OneOGameStateDto>("OneO");
 }
 
-<div class="min-h-screen text-white flex flex-col p-4 max-w-2xl mx-auto">
+<div class="min-h-screen text-white flex flex-col p-3 md:p-5 w-full max-w-screen-2xl mx-auto">
 
     @if (oneOState is null)
     {
@@ -19,60 +19,87 @@
     else if (oneOState.Phase == "GameOver")
     {
         <div class="flex flex-col items-center justify-center flex-1 gap-6">
-            <div class="text-6xl">🎉</div>
-            <h2 class="text-3xl font-bold text-yellow-400">@oneOState.WinnerName wins!</h2>
+            <div class="text-6xl md:text-8xl">🎉</div>
+            <h2 class="text-3xl md:text-5xl font-bold text-yellow-400">@oneOState.WinnerName wins!</h2>
             <p class="text-gray-400">Game over</p>
-            <div class="bg-gray-900 rounded-2xl p-5 w-full max-w-sm">
+            <div class="bg-gray-900 rounded-2xl p-5 w-full max-w-sm md:max-w-md">
                 <h3 class="text-gray-400 text-sm font-semibold uppercase tracking-widest mb-3">Final Hand Counts</h3>
                 @foreach (var kvp in oneOState.PlayerHandCounts.OrderBy(k => k.Value))
                 {
-                    <div class="flex justify-between py-1">
+                    <div class="flex justify-between py-1.5 text-sm md:text-base">
                         <span class="@(kvp.Key == oneOState.WinnerName ? "text-yellow-400 font-bold" : "text-gray-300")">@kvp.Key</span>
                         <span class="text-gray-500">@kvp.Value cards</span>
                     </div>
                 }
             </div>
             <button @onclick="GoToMenu"
-                    class="mt-2 px-6 py-3 bg-gray-800 hover:bg-gray-700 active:scale-95 text-white font-semibold rounded-xl transition-all shadow-lg text-sm border border-gray-700">
+                    class="mt-2 px-8 py-3 bg-gray-800 hover:bg-gray-700 active:scale-95 text-white font-semibold rounded-xl transition-all shadow-lg text-sm md:text-base border border-gray-700">
                 ← Back to Main Menu
             </button>
         </div>
     }
     else
     {
-        <div class="flex flex-col gap-4 flex-1">
-            <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 font-mono">@oneOState.RoomCode</span>
-                <span class="text-xs @(oneOState.Clockwise ? "text-blue-400" : "text-orange-400")">
+        <div class="flex flex-col gap-3 md:gap-4 flex-1 min-h-0">
+
+            @* ── Header bar ── *@
+            <div class="flex items-center justify-between px-1">
+                <span class="text-xs text-gray-500 font-mono tracking-widest">@oneOState.RoomCode</span>
+                <span class="text-xs font-semibold @(oneOState.Clockwise ? "text-blue-400" : "text-orange-400")">
                     @(oneOState.Clockwise ? "▶ Clockwise" : "◀ Counter-clockwise")
                 </span>
                 <LeaveGameButton />
             </div>
 
-            <div class="flex gap-2 flex-wrap">
-                @foreach (var player in oneOState.Players)
-                {
-                    var isCurrentPlayer = player.Name == oneOState.CurrentPlayerName;
-                    var isMe = player.Name == GameState.PlayerName;
-                    var count = oneOState.PlayerHandCounts.TryGetValue(player.Name, out var c) ? c : 0;
-                    if (!isMe)
+            @* ── Desktop: side-by-side. Mobile: stacked. ── *@
+            <div class="flex flex-col md:flex-row gap-3 md:gap-5 flex-1 min-h-0">
+
+                @* ── Left / Main column: play area + last action ── *@
+                <div class="flex flex-col gap-3 flex-1 min-h-0">
+                    <OneOPlayArea GameActionFunc="GameActionFunc" />
+
+                    @if (!string.IsNullOrEmpty(oneOState.LastAction))
                     {
-                        <div class="bg-gray-900 rounded-xl px-3 py-2 text-sm @(isCurrentPlayer ? "border border-yellow-400" : "border border-gray-700")">
-                            <span class="@(isCurrentPlayer ? "text-yellow-400 font-bold" : "text-gray-400")">@player.Name</span>
-                            <span class="text-gray-600 ml-2">@count cards</span>
-                        </div>
+                        <p class="text-center text-gray-500 text-sm italic px-2">@oneOState.LastAction</p>
                     }
-                }
+                </div>
+
+                @* ── Right sidebar: opponents ── *@
+                <div class="md:w-52 lg:w-60 flex-shrink-0">
+                    <div class="bg-gray-900/70 rounded-2xl p-3 md:p-4 border border-gray-800">
+                        <p class="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-3">Players</p>
+                        <div class="flex flex-row md:flex-col flex-wrap gap-2">
+                            @foreach (var player in oneOState.Players)
+                            {
+                                var isCurrentPlayer = player.Name == oneOState.CurrentPlayerName;
+                                var isMe = player.Name == GameState.PlayerName;
+                                var count = oneOState.PlayerHandCounts.TryGetValue(player.Name, out var c) ? c : 0;
+                                <div class="flex items-center gap-2 px-3 py-2 rounded-xl border transition-all
+                                            @(isCurrentPlayer
+                                                ? "border-yellow-400 bg-yellow-400/10 shadow-[0_0_10px_rgba(251,191,36,0.3)]"
+                                                : "border-gray-700 bg-gray-900/50")">
+                                    @if (isCurrentPlayer)
+                                    {
+                                        <span class="text-yellow-400 text-xs font-bold animate-bounce">▶</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="w-3"></span>
+                                    }
+                                    <span class="text-sm font-semibold @(isCurrentPlayer ? "text-yellow-300" : isMe ? "text-white" : "text-gray-300")">
+                                        @player.Name@(isMe ? " (you)" : "")
+                                    </span>
+                                    <span class="text-gray-600 text-xs ml-auto">@count</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <OneOPlayArea GameActionFunc="GameActionFunc" />
-
+            @* ── Hand — always at bottom full-width ── *@
             <OneOHand GameActionFunc="GameActionFunc" />
 
-            @if (!string.IsNullOrEmpty(oneOState.LastAction))
-            {
-                <p class="text-center text-gray-500 text-sm italic">@oneOState.LastAction</p>
-            }
         </div>
     }
 </div>
