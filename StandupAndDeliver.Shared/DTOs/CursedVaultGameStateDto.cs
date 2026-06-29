@@ -13,7 +13,8 @@ public record CursedVaultGameStateDto(
     ActiveGambleDto? ActiveGamble,
     IReadOnlyList<CursedVaultPlayerDto> Players,
     CursedVaultLastTurnDto? LastTurnSummary,
-    string? WinnerName
+    string? WinnerName,
+    bool PileShuffled
 );
 
 public record ActiveGambleDto(

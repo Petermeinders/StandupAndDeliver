@@ -31,6 +31,7 @@ public class CursedVaultGameState
     public List<CursedVaultCardType> Pile { get; set; } = [];
     public CursedVaultActiveGamble? ActiveGamble { get; set; }
     public CursedVaultLastTurnDto? LastTurnSummary { get; set; }
+    public bool PileShuffled { get; set; }
     public string? WinnerName { get; set; }
     public List<string> EliminatedPlayers { get; set; } = [];
 }

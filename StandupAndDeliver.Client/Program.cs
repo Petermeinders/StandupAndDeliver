@@ -12,6 +12,7 @@ builder.Services.AddScoped<ThemeService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddSingleton<HubService>();
 builder.Services.AddScoped<ToastService>();
+builder.Services.AddScoped<PlayerSettingsService>();
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 
 var registry = new GameRegistry();

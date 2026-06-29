@@ -19,13 +19,14 @@
 
 <div class="flex flex-col h-full min-h-0 gap-3 px-2 py-3 select-none">
 
-    @* ── Round badge ── *@
+    @* ── Round badge + leave ── *@
     <div class="flex items-center justify-between text-xs text-gray-500 px-1">
         <span class="uppercase tracking-widest font-semibold">Round @gs.Round</span>
         @if (gs.LastTurnSummary is not null)
         {
             <CursedVaultLastTurn Summary="gs.LastTurnSummary" />
         }
+        <LeaveGameButton />
     </div>
 
     @* ── Roundtable player ring ── *@
@@ -33,7 +34,7 @@
 
     @* ── Center pile + flip feed ── *@
     <div class="flex flex-col items-center gap-2">
-        <CursedVaultPile PileCount="gs.PileCount" IsMyTurn="gs.IsMyTurn" />
+        <CursedVaultPile PileCount="gs.PileCount" IsMyTurn="gs.IsMyTurn" PileShuffled="gs.PileShuffled" />
         @if (gs.ActiveGamble is not null)
         {
             <CursedVaultFlipFeed Gamble="gs.ActiveGamble" IsMyTurn="gs.IsMyTurn" />

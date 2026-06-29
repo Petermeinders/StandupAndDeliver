@@ -2,6 +2,7 @@
 @inject GameStateService GameState
 @inject ToastService Toast
 @inject SettingsService Settings
+@inject PlayerSettingsService PlayerSettings
 @inject NavigationManager Nav
 @inject SavedSessionService SavedSession
 @inject IJSRuntime JS
@@ -58,8 +59,15 @@
                 <div class="absolute right-0 top-full mt-1 w-52 bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl overflow-hidden" style="z-index:99">
                     <button @onclick="OpenSettings"
                             class="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 transition-all text-left">
-                        ⚙️ Settings
+                        ⚙️ Global Settings
                     </button>
+                    @if (GameState.PlatformState is not null)
+                    {
+                        <button @onclick="OpenGameSettings"
+                                class="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 transition-all text-left">
+                            🎮 Game Settings
+                        </button>
+                    }
                     <label class="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 cursor-pointer">
                         <input type="checkbox" checked="@Settings.StickyHeader" @onchange="ToggleStickyHeader" class="accent-yellow-400" />
                         Sticky header
@@ -235,6 +243,42 @@
     </div>
 }
 
+@* ── Game Settings modal ──────────────────────────────────────────────────── *@
+@if (_gameSettingsOpen)
+{
+    <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[115] p-4" @onclick="() => _gameSettingsOpen = false">
+        <div class="bg-gray-900 rounded-2xl w-full max-w-sm shadow-2xl border border-gray-700 p-6" @onclick:stopPropagation>
+            <h2 class="text-lg font-bold text-white mb-1">Game Settings</h2>
+            <p class="text-xs text-gray-500 mb-5">Saved to your profile. Applied when the next game starts.</p>
+
+            @if (GameState.PlatformState?.GameType == "OneO")
+            {
+                <div class="space-y-4">
+                    <label class="flex items-center justify-between gap-4 cursor-pointer">
+                        <div>
+                            <p class="text-sm font-semibold text-white">Numbers Only</p>
+                            <p class="text-xs text-gray-500 mt-0.5">Remove all special cards — Skips, Reverses, Draw Twos, and Wilds.</p>
+                        </div>
+                        <input type="checkbox"
+                               checked="@PlayerSettings.OneONumbersOnly"
+                               @onchange="OnGameSettingsNumbersOnlyChanged"
+                               class="w-5 h-5 accent-yellow-400 shrink-0" />
+                    </label>
+                </div>
+            }
+            else
+            {
+                <p class="text-gray-500 text-sm">No settings available for this game yet.</p>
+            }
+
+            <button @onclick="() => _gameSettingsOpen = false"
+                    class="mt-6 w-full py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold transition-all">
+                Done
+            </button>
+        </div>
+    </div>
+}
+
 @code {
     [Parameter] public EventCallback OnSettingsOpen { get; set; }
 
@@ -248,6 +292,7 @@
     private bool _reconnecting;
     private bool _joinOpen;
     private bool _hostLeftOpen;
+    private bool _gameSettingsOpen;
 
     private bool HostHasLeft =>
         GameState.PlatformState is { } ps &&
@@ -450,6 +495,19 @@
     {
         _menuOpen = false;
         await OnSettingsOpen.InvokeAsync();
+    }
+
+    private async Task OpenGameSettings()
+    {
+        _menuOpen = false;
+        await PlayerSettings.LoadAsync();
+        _gameSettingsOpen = true;
+    }
+
+    private async Task OnGameSettingsNumbersOnlyChanged(ChangeEventArgs e)
+    {
+        var v = e.Value is bool b ? b : bool.TryParse(e.Value?.ToString(), out var pv) && pv;
+        await PlayerSettings.SetOneONumbersOnlyAsync(v);
     }
 
     private async Task ToggleStickyHeader(ChangeEventArgs e)

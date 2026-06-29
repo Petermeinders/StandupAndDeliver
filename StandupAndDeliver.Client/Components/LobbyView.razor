@@ -2,6 +2,7 @@
 @inject GameRegistry Registry
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject PlayerSettingsService PlayerSettings
 
 @{
     var gameType = GameState.PlatformState?.GameType;
@@ -53,6 +54,22 @@
             </ul>
         </div>
 
+        @* ── Game Settings ── *@
+        @if (gameType == "OneO")
+        {
+            <div class="bg-gray-900 rounded-2xl p-5 mb-6">
+                <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-3">Game Settings</h2>
+                <label class="flex items-center justify-between gap-3 cursor-pointer">
+                    <span class="text-white text-sm font-medium">Numbers Only</span>
+                    <input type="checkbox"
+                           checked="@PlayerSettings.OneONumbersOnly"
+                           @onchange="OnNumbersOnlyChanged"
+                           class="w-4 h-4 accent-yellow-400" />
+                </label>
+                <p class="text-xs text-gray-500 mt-1.5">Remove all special cards (Skip, Reverse, Draw Two, Wilds) for a simpler game.</p>
+            </div>
+        }
+
         @if (_isHost)
         {
             <div class="text-center">
@@ -82,7 +99,7 @@
 
 @code {
     [Parameter, EditorRequired] public EventCallback OnStart { get; set; }
-    [Parameter, EditorRequired] public Func<Task<HubResult>> StartGameFunc { get; set; } = default!;
+    [Parameter, EditorRequired] public Func<string?, Task<HubResult>> StartGameFunc { get; set; } = default!;
 
     private bool _isHost;
     private bool _starting;
@@ -94,6 +111,11 @@
 
     private string QrCodeUrl =>
         $"https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=10&data={Uri.EscapeDataString(JoinUrl)}";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await PlayerSettings.LoadAsync();
+    }
 
     protected override void OnParametersSet()
     {
@@ -110,12 +132,23 @@
         StateHasChanged();
     }
 
+    private async Task OnNumbersOnlyChanged(ChangeEventArgs e)
+    {
+        await PlayerSettings.SetOneONumbersOnlyAsync((bool)(e.Value ?? false));
+    }
+
     private async Task OnStartGame()
     {
         _starting = true;
         _error = null;
         await JS.InvokeVoidAsync("gameInterop.playSound", "confirm");
-        var result = await StartGameFunc();
+        var gameType = GameState.PlatformState?.GameType;
+        string? settingsJson = gameType switch
+        {
+            "OneO" => PlayerSettings.GetOneOSettingsJson(),
+            _ => null
+        };
+        var result = await StartGameFunc(settingsJson);
         if (!result.Success) _error = result.Error;
         _starting = false;
     }

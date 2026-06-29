@@ -1,5 +1,6 @@
 @inject NavigationManager Nav
 @inject GameStateService GameState
+@inject HubService Hub
 @inject SavedSessionService SavedSession
 
 <div class="mt-6 text-center">
@@ -12,6 +13,8 @@
 @code {
     private async Task OnLeave()
     {
+        if (GameState.PlatformState?.RoomCode is { } code)
+            await Hub.LeaveRoomGroupAsync(code);
         await SavedSession.ClearAsync();
         GameState.Clear();
         Nav.NavigateTo("/");

@@ -86,8 +86,8 @@ public sealed class HubService : IAsyncDisposable
     public async Task<HubResult> RejoinAsync(string code, string playerName)
         => await Invoke("RejoinRoom", code, playerName);
 
-    public async Task<HubResult> StartGameAsync()
-        => await Invoke("StartGame");
+    public async Task<HubResult> StartGameAsync(string? settingsJson = null)
+        => await Invoke("StartGame", settingsJson);
 
     public async Task<HubResult> GameActionAsync(string action, string? payload = null)
         => await Invoke("GameAction", action, payload);

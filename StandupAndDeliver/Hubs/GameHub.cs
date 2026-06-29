@@ -24,6 +24,15 @@ public class GameHub(
         if (!validTypes.Contains(gameType)) gameType = validTypes.FirstOrDefault() ?? "standup";
 
         var safeName = WebUtility.HtmlEncode(playerName.Trim());
+
+        // Scrub this connection ID from any room it currently occupies so stale
+        // lookups (StartGame, GameAction) can't find the wrong room.
+        foreach (var stale in gameRoomService.GetAllRooms())
+        {
+            var sp = stale.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
+            if (sp is not null) { sp.ConnectionId = string.Empty; sp.IsConnected = false; }
+        }
+
         var (room, roomCode, created, error) = gameRoomService.CreateOrJoinRoom(code, safeName, Context.ConnectionId, gameType, useFunName);
 
         if (room is null) return new HubResult(false, error ?? "Failed to join room.");
@@ -97,11 +106,17 @@ public class GameHub(
         return new HubResult(true);
     }
 
-    public async Task<HubResult> StartGame()
+    public async Task<HubResult> StartGame(string? settingsJson = null)
     {
+        Console.WriteLine($"[GameHub] StartGame called connId={Context.ConnectionId[..Math.Min(8,Context.ConnectionId.Length)]} settings={settingsJson ?? "null"}");
         var room = gameRoomService.GetAllRooms()
             .FirstOrDefault(r => r.Players.Any(p => p.ConnectionId == Context.ConnectionId));
-        if (room is null) return new HubResult(false, "Room not found.");
+        if (room is null)
+        {
+            Console.WriteLine($"[GameHub] StartGame: room not found for connId");
+            return new HubResult(false, "Room not found.");
+        }
+        Console.WriteLine($"[GameHub] StartGame: found room={room.RoomCode} phase={room.Phase}");
 
         var (updatedRoom, result) = gameRoomService.StartGame(room.RoomCode, Context.ConnectionId);
         if (!result.Success)
@@ -111,7 +126,15 @@ public class GameHub(
         }
 
         var game = GetGame(updatedRoom!.GameType);
-        await game.StartGame(updatedRoom, Context.ConnectionId);
+        try
+        {
+            await game.StartGame(updatedRoom, Context.ConnectionId, settingsJson);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GameHub] StartGame exception: {ex}");
+            return new HubResult(false, $"Game start failed: {ex.Message}");
+        }
         _ = eventLog.LogAsync("GameStarted", updatedRoom.GameType, updatedRoom.RoomCode, "", updatedRoom.Players.Count(p => p.IsConnected));
         return new HubResult(true);
     }
@@ -165,7 +188,18 @@ public class GameHub(
 
     public async Task LeaveRoomGroup(string roomCode)
     {
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, roomCode.ToUpperInvariant());
+        var upper = roomCode.ToUpperInvariant();
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, upper);
+
+        // Sever the connection-ID link so this caller can't be found in the old room
+        // by future hub method lookups (StartGame, GameAction, etc.)
+        var room = gameRoomService.GetRoom(upper);
+        var player = room?.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
+        if (player is not null)
+        {
+            player.ConnectionId = string.Empty;
+            player.IsConnected = false;
+        }
     }
 
     public async Task<HubResult> PromoteToHost()

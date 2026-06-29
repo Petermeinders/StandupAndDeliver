@@ -89,8 +89,12 @@ else if (GameState.PlatformState is { } platform)
 }
 else
 {
-    <div class="min-h-screen text-white flex items-center justify-center">
-        <p class="text-gray-400">Loading…</p>
+    <div class="min-h-screen text-white flex flex-col items-center justify-center gap-4 p-6">
+        <p class="text-gray-400 text-lg">Room not found or session expired.</p>
+        <button @onclick="GoHomeAsync"
+                class="px-8 py-3 bg-yellow-400 text-black rounded-xl font-bold hover:bg-yellow-300 transition-all">
+            Back to Home
+        </button>
     </div>
 }
 </div>
@@ -282,7 +286,13 @@ else
         InvokeAsync(StateHasChanged);
     }
 
-    private async Task<HubResult> StartGame() => await Hub.StartGameAsync();
+    private async Task<HubResult> StartGame(string? settingsJson = null)
+    {
+        var result = await Hub.StartGameAsync(settingsJson);
+        if (result.Success && GameState.PlatformState is { } ps && GameState.PlayerName is not null)
+            _ = Hub.RejoinAsync(ps.RoomCode, GameState.PlayerName);
+        return result;
+    }
     private async Task<HubResult> GameAction(string action, string? payload = null) => await Hub.GameActionAsync(action, payload);
 
     private async Task TryRejoinAsync()

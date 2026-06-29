@@ -17,7 +17,7 @@ public class CursedVaultGame(IHubContext<GameHub, IGameClient> hubContext, GameR
 
     private const string BotName = "🤖 Vault Bot";
 
-    public async Task StartGame(GameRoom room, string connectionId)
+    public async Task StartGame(GameRoom room, string connectionId, string? settingsJson = null)
     {
         var existingBot = room.Players.FirstOrDefault(p => p.IsBot);
         if (existingBot is not null)
@@ -147,6 +147,7 @@ public class CursedVaultGame(IHubContext<GameHub, IGameClient> hubContext, GameR
             foreach (var card in state.ActiveGamble.FlippedCards)
                 state.Pile.Add(card);
             Shuffle(state.Pile);
+            state.PileShuffled = true;
 
             var hand = state.PlayerHands[player.Name];
             bool eliminated = false;
@@ -534,11 +535,15 @@ public class CursedVaultGame(IHubContext<GameHub, IGameClient> hubContext, GameR
                 ActiveGamble: activeGambleDto,
                 Players: players,
                 LastTurnSummary: state.LastTurnSummary,
-                WinnerName: state.WinnerName
+                WinnerName: state.WinnerName,
+                PileShuffled: state.PileShuffled
             );
 
             await hubContext.Clients.Client(player.ConnectionId)
                 .ReceiveGameSpecificState("cursed-vault", JsonSerializer.Serialize(dto));
         }
+
+        // Clear one-shot flag after all clients have received it
+        state.PileShuffled = false;
     }
 }

@@ -6,7 +6,7 @@ namespace StandupAndDeliver.Games;
 public interface ICardGame
 {
     string GameType { get; }
-    Task StartGame(GameRoom room, string connectionId);
+    Task StartGame(GameRoom room, string connectionId, string? settingsJson = null);
     Task<HubResult> HandleAction(string action, string? payloadJson, GameRoom room, string connectionId);
     Task OnPlayerDisconnected(GameRoom room, string connectionId);
     Task OnPlayerRejoined(GameRoom room, string connectionId);

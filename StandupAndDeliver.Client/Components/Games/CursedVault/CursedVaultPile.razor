@@ -28,10 +28,16 @@
     </div>
 
     <span class="text-yellow-400 font-bold text-sm">@PileCount card@(PileCount != 1 ? "s" : "")</span>
+
+    @if (PileShuffled)
+    {
+        <span class="text-orange-400 text-xs font-semibold animate-pulse">🔀 Pile reshuffled!</span>
+    }
 </div>
 
 @code {
     [Parameter, EditorRequired] public int PileCount { get; set; }
     [Parameter, EditorRequired] public bool IsMyTurn { get; set; }
+    [Parameter] public bool PileShuffled { get; set; }
     [Parameter] public ActiveGambleDto? ActiveGamble { get; set; }
 }

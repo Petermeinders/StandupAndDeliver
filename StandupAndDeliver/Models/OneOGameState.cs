@@ -11,4 +11,5 @@ public class OneOGameState
     public string? WinnerName { get; set; }
     public string? LastAction { get; set; }
     public OneOCard? LastPlayedCard { get; set; }
+    public bool NumbersOnly { get; set; }
 }

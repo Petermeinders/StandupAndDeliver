@@ -14,7 +14,7 @@ public class StandupGame(GameTimerService gameTimerService, IHubContext<GameHub,
 
     public string GameType => "standup";
 
-    public async Task StartGame(GameRoom room, string connectionId)
+    public async Task StartGame(GameRoom room, string connectionId, string? settingsJson = null)
     {
         var state = new StandupRoomState();
         _states[room.RoomCode] = state;

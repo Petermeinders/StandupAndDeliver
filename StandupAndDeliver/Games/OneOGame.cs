@@ -16,8 +16,19 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext, GameRoomServ
 
     private const string BotName = "🤖 OneO Bot";
 
-    public async Task StartGame(GameRoom room, string connectionId)
+    public async Task StartGame(GameRoom room, string connectionId, string? settingsJson = null)
     {
+        bool numbersOnly = false;
+        if (settingsJson is not null)
+        {
+            try
+            {
+                var s = JsonDocument.Parse(settingsJson).RootElement;
+                if (s.TryGetProperty("NumbersOnly", out var prop)) numbersOnly = prop.GetBoolean();
+            }
+            catch { }
+        }
+
         // Rename lobby bot to game-specific name, or add one if somehow absent
         var existingBot = room.Players.FirstOrDefault(p => p.IsBot);
         if (existingBot is not null)
@@ -25,8 +36,8 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext, GameRoomServ
         else if (room.Players.Count(p => !p.IsBot) == 1)
             room.Players.Add(new Player { Name = BotName, ConnectionId = $"bot-{room.RoomCode}", IsBot = true, IsConnected = false });
 
-        var state = new OneOGameState();
-        var deck = GenerateDeck();
+        var state = new OneOGameState { NumbersOnly = numbersOnly };
+        var deck = GenerateDeck(numbersOnly);
         Shuffle(deck);
 
         foreach (var player in room.Players)
@@ -400,14 +411,18 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext, GameRoomServ
             room.GameType);
         await hubContext.Clients.Group(room.RoomCode).ReceiveGameState(lean);
 
-        foreach (var player in room.Players.Where(p => p.IsConnected))
+        var connected = room.Players.Where(p => p.IsConnected).ToList();
+        Console.WriteLine($"[OneO] BroadcastState room={room.RoomCode} phase={room.Phase} connectedPlayers={connected.Count} allPlayers={room.Players.Count}");
+        foreach (var player in connected)
         {
+            Console.WriteLine($"[OneO] Sending to {player.Name} connId={player.ConnectionId[..Math.Min(8, player.ConnectionId.Length)]}...");
             var myHand = state.PlayerHands.TryGetValue(player.Name, out var hand)
                 ? (IReadOnlyList<OneOCardDto>)hand.Select(ToDto).ToList()
                 : Array.Empty<OneOCardDto>();
             var dto = BuildDto(room, state, myHand);
             await hubContext.Clients.Client(player.ConnectionId)
                 .ReceiveGameSpecificState("OneO", JsonSerializer.Serialize(dto));
+            Console.WriteLine($"[OneO] Sent to {player.Name}");
         }
     }
 
@@ -476,7 +491,7 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext, GameRoomServ
         state.DrawPile.AddRange(reshuffled);
     }
 
-    private static List<OneOCard> GenerateDeck()
+    private static List<OneOCard> GenerateDeck(bool numbersOnly = false)
     {
         var deck = new List<OneOCard>();
         int id = 0;
@@ -489,16 +504,22 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext, GameRoomServ
             {
                 for (int v = 1; v <= 9; v++)
                     deck.Add(new OneOCard { Id = id++, Color = color, Type = OneOCardType.Number, Value = v });
-                deck.Add(new OneOCard { Id = id++, Color = color, Type = OneOCardType.Skip, Value = 20 });
-                deck.Add(new OneOCard { Id = id++, Color = color, Type = OneOCardType.Reverse, Value = 20 });
-                deck.Add(new OneOCard { Id = id++, Color = color, Type = OneOCardType.DrawTwo, Value = 20 });
+                if (!numbersOnly)
+                {
+                    deck.Add(new OneOCard { Id = id++, Color = color, Type = OneOCardType.Skip, Value = 20 });
+                    deck.Add(new OneOCard { Id = id++, Color = color, Type = OneOCardType.Reverse, Value = 20 });
+                    deck.Add(new OneOCard { Id = id++, Color = color, Type = OneOCardType.DrawTwo, Value = 20 });
+                }
             }
         }
 
-        for (int n = 0; n < 4; n++)
+        if (!numbersOnly)
         {
-            deck.Add(new OneOCard { Id = id++, Color = OneOColor.Wild, Type = OneOCardType.Wild, Value = 50 });
-            deck.Add(new OneOCard { Id = id++, Color = OneOColor.Wild, Type = OneOCardType.WildDrawFour, Value = 50 });
+            for (int n = 0; n < 4; n++)
+            {
+                deck.Add(new OneOCard { Id = id++, Color = OneOColor.Wild, Type = OneOCardType.Wild, Value = 50 });
+                deck.Add(new OneOCard { Id = id++, Color = OneOColor.Wild, Type = OneOCardType.WildDrawFour, Value = 50 });
+            }
         }
 
         return deck;
