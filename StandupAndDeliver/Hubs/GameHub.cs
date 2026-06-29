@@ -163,6 +163,11 @@ public class GameHub(
         await base.OnDisconnectedAsync(exception);
     }
 
+    public async Task LeaveRoomGroup(string roomCode)
+    {
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, roomCode.ToUpperInvariant());
+    }
+
     public async Task<HubResult> PromoteToHost()
     {
         var room = GetRoomForCaller();

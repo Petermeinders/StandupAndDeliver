@@ -427,7 +427,10 @@
         _menuOpen = false;
         var code = GameState.PlatformState?.RoomCode;
         if (code is not null)
+        {
             Toast.LogEvent($"Left room {code}", "Room", ToastLevel.Warning);
+            await Hub.LeaveRoomGroupAsync(code);
+        }
         await SavedSession.ClearAsync();
         GameState.Clear();
         _lastPhase = null;

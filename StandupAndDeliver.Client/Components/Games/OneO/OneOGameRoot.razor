@@ -1,4 +1,5 @@
 @inject GameStateService GameState
+@inject HubService Hub
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject SavedSessionService SavedSession
@@ -92,6 +93,8 @@
 
     private async Task GoToMenu()
     {
+        var code = GameState.PlatformState?.RoomCode;
+        if (code is not null) await Hub.LeaveRoomGroupAsync(code);
         await SavedSession.ClearAsync();
         GameState.Clear();
         Nav.NavigateTo("/?game=OneO");

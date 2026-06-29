@@ -95,6 +95,12 @@ public sealed class HubService : IAsyncDisposable
     public async Task<HubResult> PromoteToHostAsync()
         => await Invoke("PromoteToHost");
 
+    public async Task LeaveRoomGroupAsync(string roomCode)
+    {
+        if (_hub is { State: HubConnectionState.Connected })
+            await _hub.InvokeAsync("LeaveRoomGroup", roomCode);
+    }
+
     private async Task<HubResult> Invoke(string method, params object?[] args)
     {
         if (_hub is null || _hub.State != HubConnectionState.Connected)
