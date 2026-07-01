@@ -4,6 +4,7 @@
 @inject HubService Hub
 @inject ToastService Toast
 @inject GameRegistry Registry
+@inject SavedSessionService SavedSession
 @inject NavigationManager Nav
 @inject HttpClient Http
 @inject ThemeService Theme
@@ -169,9 +170,7 @@
     private string? _lockedGameId;
 
     private string _bgStyle =>
-        _focusedGame?.ImageUrl is { } img
-            ? $"background-image: url('{img}')"
-            : "background-image: url('/OfficeBackground.jpg')";
+        Registry.GetBackgroundStyle(_focusedGameId);
 
     private bool _feedbackOpen;
     private string _feedbackText = "";
@@ -185,6 +184,7 @@
     private bool _themeInitialized;
     private string? _resumeCode;
     private string? _resumeName;
+    private string? _lastHandledJoinCode;
 
     protected override void OnInitialized()
     {
@@ -202,51 +202,69 @@
             _selectedGame = Game;
             _focusedGameId = Game;
         }
-        // Propagate selected game to state so header uses it when creating
-        GameState.SelectedGameType = _selectedGame;
+        GameState.SelectedGameType = _focusedGameId;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender && _themeInitialized) return;
-        _themeInitialized = true;
-
-        await Theme.InitializeAsync();
-        await Settings.InitializeAsync();
-
-        try
+        if (!_themeInitialized)
         {
-            var code = await JS.InvokeAsync<string?>("localStorage.getItem", "sad_room");
-            var name = await JS.InvokeAsync<string?>("localStorage.getItem", "sad_name");
-            if (!string.IsNullOrEmpty(code) && !string.IsNullOrEmpty(name))
-            {
-                _resumeCode = code;
-                _resumeName = name;
-            }
+            _themeInitialized = true;
+            await Theme.InitializeAsync();
+            await Settings.InitializeAsync();
 
-            // Pre-populate player name from localStorage
-            if (string.IsNullOrEmpty(GameState.PlayerName) && !string.IsNullOrEmpty(name))
-                GameState.PlayerName = name;
-        }
-        catch { }
-
-        // If a join code was passed via URL, look up the room's game type
-        if (!string.IsNullOrEmpty(Join))
-        {
             try
             {
-                var resp = await Http.GetFromJsonAsync<RoomInfoDto>($"/api/rooms/{Join.ToUpperInvariant()}/info");
-                if (resp?.GameType is { } gameType)
+                var code = await JS.InvokeAsync<string?>("localStorage.getItem", "sad_room");
+                var name = await JS.InvokeAsync<string?>("localStorage.getItem", "sad_name");
+                if (!string.IsNullOrEmpty(code) && !string.IsNullOrEmpty(name))
                 {
-                    _lockedGameId = gameType;
-                    _focusedGameId = gameType;
-                    _selectedGame = gameType;
+                    _resumeCode = code;
+                    _resumeName = name;
                 }
+
+                if (string.IsNullOrEmpty(GameState.PlayerName) && !string.IsNullOrEmpty(name))
+                    GameState.PlayerName = name;
             }
             catch { }
         }
 
-        StateHasChanged();
+        // Invite link: ?join=CODE — open Start Here or go straight to lobby
+        if (!string.IsNullOrEmpty(Join))
+        {
+            var joinCode = Join.ToUpperInvariant();
+            if (joinCode != _lastHandledJoinCode)
+            {
+                _lastHandledJoinCode = joinCode;
+                await HandleJoinInviteAsync(joinCode);
+            }
+        }
+    }
+
+    private async Task HandleJoinInviteAsync(string joinCode)
+    {
+        GameState.PendingJoinCode = joinCode;
+
+        try
+        {
+            var resp = await Http.GetFromJsonAsync<RoomInfoDto>($"/api/rooms/{joinCode}/info");
+            if (resp?.GameType is { } gameType)
+            {
+                _lockedGameId = gameType;
+                _focusedGameId = gameType;
+                _selectedGame = gameType;
+                GameState.SelectedGameType = gameType;
+            }
+        }
+        catch { }
+
+        if (!string.IsNullOrEmpty(GameState.PlayerName))
+        {
+            Nav.NavigateTo($"/room?action=join&code={Uri.EscapeDataString(joinCode)}");
+            return;
+        }
+
+        _header?.BeginJoin(joinCode);
     }
 
     private async Task OnGameState(GameStateDto state)
@@ -258,8 +276,6 @@
         else
             await InvokeAsync(StateHasChanged);
     }
-
-    private record RoomInfoDto(string GameType);
 
     private void OnResume()
     {
@@ -295,26 +311,29 @@
         try
         {
             var gameType = _focusedGameId;
+            GameState.SelectedGameType = gameType;
 
-            // If already in a room for this game type, just go to the lobby
-            if (GameState.PlatformState is { Phase: GamePhase.Lobby } ps && ps.GameType == gameType)
+            // Already in the right lobby — open it
+            if (GameState.PlatformState is { Phase: GamePhase.Lobby, GameType: var gt } && gt == gameType)
             {
-                Nav.NavigateTo("/room");
+                Nav.NavigateTo($"/room?game={Uri.EscapeDataString(gameType)}");
                 return;
             }
 
-            // Otherwise create a new room for the selected game
-            await Hub.EnsureConnectedAsync();
-            var result = await Hub.CreateOrJoinAsync(null, GameState.PlayerName, gameType, false);
-            if (result.Success)
+            // Drop any in-progress or wrong-game session before creating a new room
+            if (GameState.PlatformState is { } existing)
             {
-                await JS.InvokeVoidAsync("gameInterop.playSound", "confirm");
-                Nav.NavigateTo("/room");
+                await Hub.EnsureConnectedAsync();
+                await Hub.LeaveRoomGroupAsync(existing.RoomCode);
             }
-            else
-            {
-                Toast.Error(result.Error ?? "Could not create room.");
-            }
+
+            var playerName = GameState.PlayerName;
+            GameState.ClearRoomSession();
+            GameState.PlayerName = playerName;
+            GameState.SelectedGameType = gameType;
+            await SavedSession.ClearAsync();
+
+            Nav.NavigateTo($"/room?action=create&game={Uri.EscapeDataString(gameType)}");
         }
         catch (Exception ex)
         {

@@ -5,6 +5,8 @@
 @inject PlayerSettingsService PlayerSettings
 @inject NavigationManager Nav
 @inject SavedSessionService SavedSession
+@inject GameRegistry Registry
+@inject HttpClient Http
 @inject IJSRuntime JS
 @implements IDisposable
 
@@ -26,7 +28,7 @@
         </button>
 
         @* Start Here / Friends / Room code button *@
-        <button @onclick="() => _joinOpen = true"
+        <button @onclick="OpenJoinModal"
                 class="px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-all active:scale-95
                        @(GameState.PlatformState is not null
                            ? "bg-gray-700 text-white hover:bg-gray-600 font-mono tracking-wide"
@@ -186,27 +188,73 @@
             }
             else if (string.IsNullOrEmpty(GameState.PlayerName))
             {
-                @* ── No name yet: prompt for name first ── *@
+                @* ── No name yet: prompt for name, then join friend's lobby or create ── *@
                 <h2 class="text-lg font-bold text-white mb-4">Start Here</h2>
+
+                @if (HasPendingJoin)
+                {
+                    <PendingLobbyPreview JoinCode="@GetJoinCode()"
+                                         Room="_pendingRoom"
+                                         Loading="_pendingRoomLoading"
+                                         NotFound="_pendingRoomNotFound" />
+                }
 
                 <div class="mb-4">
                     <label class="text-xs text-gray-500 uppercase tracking-wider font-semibold block mb-1">Your name <span class="text-yellow-400 normal-case tracking-normal font-normal">Required</span></label>
                     <input @bind="_name" @bind:event="oninput"
+                           @onkeydown="OnStartHereKeyDown"
                            placeholder="Enter your name"
                            maxlength="20"
                            class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-yellow-400" />
                 </div>
 
-                <button @onclick="OnCreateClick"
-                        disabled="@(_creating || string.IsNullOrWhiteSpace(_name))"
-                        class="w-full py-2.5 rounded-xl text-sm font-bold transition-all
-                               @(_creating ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-                                           : "bg-yellow-400 text-black hover:bg-yellow-300 active:scale-95")">
-                    @(_creating ? "Creating…" : "Create Room")
+                @if (HasPendingJoin)
+                {
+                    <button @onclick="OnJoinWithNameClick"
+                            disabled="@(_joining || string.IsNullOrWhiteSpace(_name) || _pendingRoomNotFound)"
+                            class="w-full py-2.5 rounded-xl text-sm font-bold transition-all
+                                   @(_joining ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                                              : "bg-yellow-400 text-black hover:bg-yellow-300 active:scale-95")">
+                        @(_joining ? "Joining…" : "Join Lobby")
+                    </button>
+                }
+                else
+                {
+                    <button @onclick="OnCreateClick"
+                            disabled="@(_creating || string.IsNullOrWhiteSpace(_name))"
+                            class="w-full py-2.5 rounded-xl text-sm font-bold transition-all
+                                   @(_creating ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                                               : "bg-yellow-400 text-black hover:bg-yellow-300 active:scale-95")">
+                        @(_creating ? "Creating…" : "Create Room")
+                    </button>
+                }
+
+                <button @onclick="CloseJoinModal"
+                        class="w-full mt-2 py-2 rounded-xl text-xs text-gray-600 hover:text-gray-400 transition-all">
+                    Cancel
+                </button>
+            }
+            else if (HasPendingJoin)
+            {
+                @* ── Has name, invite pending: join that lobby only ── *@
+                <h2 class="text-lg font-bold text-white mb-1">Join Friends</h2>
+                <p class="text-xs text-gray-500 mb-4">Playing as <span class="text-white font-semibold">@GameState.PlayerName</span></p>
+
+                <PendingLobbyPreview JoinCode="@GetJoinCode()"
+                                     Room="_pendingRoom"
+                                     Loading="_pendingRoomLoading"
+                                     NotFound="_pendingRoomNotFound" />
+
+                <button @onclick="OnJoinClick"
+                        disabled="@(_joining || _pendingRoomNotFound)"
+                        class="w-full py-2.5 rounded-xl text-sm font-bold transition-all mb-2
+                               @(_joining ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                                          : "bg-yellow-400 text-black hover:bg-yellow-300 active:scale-95")">
+                    @(_joining ? "Joining…" : "Join Lobby")
                 </button>
 
-                <button @onclick="() => _joinOpen = false"
-                        class="w-full mt-2 py-2 rounded-xl text-xs text-gray-600 hover:text-gray-400 transition-all">
+                <button @onclick="CloseJoinModal"
+                        class="w-full py-2 rounded-xl text-xs text-gray-600 hover:text-gray-400 transition-all">
                     Cancel
                 </button>
             }
@@ -346,6 +394,14 @@
     private bool _joinOpen;
     private bool _hostLeftOpen;
     private bool _gameSettingsOpen;
+    private RoomInfoDto? _pendingRoom;
+    private bool _pendingRoomLoading;
+    private bool _pendingRoomNotFound;
+
+    private bool HasPendingJoin => !string.IsNullOrWhiteSpace(GetJoinCode());
+
+    private string GetJoinCode() =>
+        (GameState.PendingJoinCode ?? _code).Trim().ToUpperInvariant();
 
     private bool HostHasLeft =>
         GameState.PlatformState is { } ps &&
@@ -376,6 +432,86 @@
         Hub.OnGameState += OnGameStateReceived;
     }
 
+    /// <summary>Opens the join modal with a room code pre-filled (e.g. from QR or invite URL).</summary>
+    public void BeginJoin(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return;
+        var normalized = code.Trim().ToUpperInvariant();
+        GameState.PendingJoinCode = normalized;
+        _code = normalized;
+        _joinOpen = true;
+        _ = LoadPendingRoomPreviewAsync();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OpenJoinModal()
+    {
+        if (!string.IsNullOrEmpty(GameState.PendingJoinCode))
+            _code = GameState.PendingJoinCode;
+        _joinOpen = true;
+        if (HasPendingJoin)
+            await LoadPendingRoomPreviewAsync();
+    }
+
+    private void CloseJoinModal()
+    {
+        _joinOpen = false;
+    }
+
+    private async Task LoadPendingRoomPreviewAsync()
+    {
+        var code = GetJoinCode();
+        if (string.IsNullOrWhiteSpace(code)) return;
+
+        _pendingRoomLoading = true;
+        _pendingRoomNotFound = false;
+        _pendingRoom = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var resp = await Http.GetFromJsonAsync<RoomInfoDto>($"/api/rooms/{code}/info");
+            if (resp is null)
+            {
+                _pendingRoomNotFound = true;
+            }
+            else
+            {
+                _pendingRoom = resp;
+                GameState.SelectedGameType = resp.GameType;
+            }
+        }
+        catch
+        {
+            _pendingRoomNotFound = true;
+        }
+        finally
+        {
+            _pendingRoomLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task<bool> SavePlayerNameAsync(string playerName)
+    {
+        if (string.IsNullOrWhiteSpace(playerName)) return false;
+        GameState.PlayerName = playerName;
+        await JS.InvokeVoidAsync("localStorage.setItem", "sad_name", playerName);
+        return true;
+    }
+
+    private async Task EnterLobbyAfterJoinAsync(string? roomCode, string playerName, string verb)
+    {
+        GameState.PendingJoinCode = null;
+        _code = "";
+        _pendingRoom = null;
+        _joinOpen = false;
+        Toast.Success($"{verb} room {roomCode}!");
+        Toast.LogEvent($"{verb} room {roomCode} as {playerName}", "Room");
+        await JS.InvokeVoidAsync("gameInterop.playSound", "confirm");
+        Nav.NavigateTo("/room");
+    }
+
     private void OnHubReconnecting()
     {
         _reconnecting = true;
@@ -392,7 +528,8 @@
 
     private async Task OnGameStateReceived(GameStateDto state)
     {
-        // Log phase transitions
+        GameState.UpdatePlatform(state);
+
         if (_lastPhase != state.Phase)
         {
             if (state.Phase == GamePhase.Playing)
@@ -413,8 +550,15 @@
 
     private async Task OnCreateClick()
     {
+        if (HasPendingJoin)
+        {
+            Toast.Warn("You're joining a friend's lobby — use Join Lobby.");
+            return;
+        }
+
         var playerName = string.IsNullOrWhiteSpace(GameState.PlayerName) ? _name.Trim() : GameState.PlayerName;
         if (string.IsNullOrWhiteSpace(playerName)) { Toast.Warn("Enter your name first."); return; }
+        if (!await SavePlayerNameAsync(playerName)) return;
 
         _creating = true;
         StateHasChanged();
@@ -425,13 +569,8 @@
             var result = await Hub.CreateOrJoinAsync(null, playerName, gameType, _useFunName);
             if (result.Success)
             {
-                GameState.PlayerName = playerName;
-                await JS.InvokeVoidAsync("localStorage.setItem", "sad_name", playerName);
                 var roomCode = result.RoomCode ?? GameState.PlatformState?.RoomCode;
-                _joinOpen = false;
-                Toast.Success($"Created room {roomCode}!");
-                Toast.LogEvent($"Created room {roomCode} as {playerName}", "Room");
-                await JS.InvokeVoidAsync("gameInterop.playSound", "confirm");
+                await EnterLobbyAfterJoinAsync(roomCode, playerName, "Created");
             }
             else { Toast.Error(result.Error ?? "Failed to create room."); }
         }
@@ -439,28 +578,45 @@
         finally { _creating = false; }
     }
 
-    private async Task OnJoinClick()
+    private async Task OnJoinWithNameClick()
     {
-        var playerName = GameState.PlayerName;
+        var playerName = _name.Trim();
         if (string.IsNullOrWhiteSpace(playerName)) { Toast.Warn("Enter your name first."); return; }
-        if (string.IsNullOrWhiteSpace(_code)) { Toast.Warn("Enter a room code or fun name."); return; }
+        var code = GetJoinCode();
+        if (string.IsNullOrWhiteSpace(code)) { Toast.Warn("Enter a room code or fun name."); return; }
+        if (_pendingRoomNotFound) { Toast.Error("That room no longer exists."); return; }
+        if (!await SavePlayerNameAsync(playerName)) return;
 
         _joining = true;
         StateHasChanged();
         try
         {
             await Hub.EnsureConnectedAsync();
-            var gameType = GameState.SelectedGameType ?? "standup";
-            var result = await Hub.CreateOrJoinAsync(_code.Trim().ToUpperInvariant(), playerName, gameType, false);
+            var result = await Hub.JoinAsync(code, playerName);
             if (result.Success)
-            {
-                var roomCode = result.RoomCode ?? GameState.PlatformState?.RoomCode;
-                _code = "";
-                _joinOpen = false;
-                Toast.Success($"Joined room {roomCode}!");
-                Toast.LogEvent($"Joined room {roomCode} as {playerName}", "Room");
-                await JS.InvokeVoidAsync("gameInterop.playSound", "confirm");
-            }
+                await EnterLobbyAfterJoinAsync(result.RoomCode ?? GameState.PlatformState?.RoomCode ?? code, playerName, "Joined");
+            else { Toast.Error(result.Error ?? "Failed to join."); }
+        }
+        catch (Exception ex) { Toast.Error(ex.Message); }
+        finally { _joining = false; }
+    }
+
+    private async Task OnJoinClick()
+    {
+        var playerName = GameState.PlayerName;
+        if (string.IsNullOrWhiteSpace(playerName)) { Toast.Warn("Enter your name first."); return; }
+        var code = GetJoinCode();
+        if (string.IsNullOrWhiteSpace(code)) { Toast.Warn("Enter a room code or fun name."); return; }
+        if (_pendingRoomNotFound) { Toast.Error("That room no longer exists."); return; }
+
+        _joining = true;
+        StateHasChanged();
+        try
+        {
+            await Hub.EnsureConnectedAsync();
+            var result = await Hub.JoinAsync(code, playerName);
+            if (result.Success)
+                await EnterLobbyAfterJoinAsync(result.RoomCode ?? GameState.PlatformState?.RoomCode ?? code, playerName, "Joined");
             else { Toast.Error(result.Error ?? "Failed to join."); }
         }
         catch (Exception ex) { Toast.Error(ex.Message); }
@@ -474,9 +630,16 @@
             var result = await JS.InvokeAsync<string?>("gameInterop.scanQrCode");
             if (!string.IsNullOrEmpty(result))
             {
-                _code = ExtractCodeFromUrl(result) ?? result.Trim().ToUpperInvariant();
-                _joinOpen = true;
-                StateHasChanged();
+                var code = ExtractCodeFromUrl(result) ?? result.Trim().ToUpperInvariant();
+                GameState.PendingJoinCode = code;
+                if (string.IsNullOrEmpty(GameState.PlayerName))
+                    BeginJoin(code);
+                else
+                {
+                    _code = code;
+                    _joinOpen = true;
+                    await LoadPendingRoomPreviewAsync();
+                }
             }
         }
         catch (Exception ex) when (!ex.Message.Contains("Cancelled"))
@@ -582,6 +745,15 @@
     private async Task OnJoinKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Enter") await OnJoinClick();
+    }
+
+    private async Task OnStartHereKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter") return;
+        if (!string.IsNullOrWhiteSpace(_code))
+            await OnJoinWithNameClick();
+        else
+            await OnCreateClick();
     }
 
     public void Dispose()

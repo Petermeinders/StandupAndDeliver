@@ -12,7 +12,7 @@
 
 <PageTitle>Fireside Arcade</PageTitle>
 
-<div class="landing-bg"></div>
+<div class="landing-bg" style="@_bgStyle"></div>
 
 <AppHeader @ref="_header" OnSettingsOpen="OpenSettings" />
 <SettingsModal @ref="_settingsModal" />
@@ -24,7 +24,7 @@
     </div>
 }
 
-<div class="@(Settings.StickyHeader ? "pt-12" : "")">
+<div class="@(Settings.StickyHeader ? "pt-12" : "") relative z-10">
 @if (_connecting)
 {
     <div class="min-h-screen text-white flex items-center justify-center">
@@ -118,6 +118,11 @@ else
 
     private Dictionary<string, object> _gameParams = [];
 
+    private string _bgStyle =>
+        GameState.PlatformState?.Phase == GamePhase.Lobby
+            ? Registry.GetBackgroundStyle(GameState.PlatformState.GameType)
+            : Registry.GetBackgroundStyle(null);
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
@@ -145,55 +150,66 @@ else
         {
             await Hub.EnsureConnectedAsync();
 
-            // If we already have a room (joined from header), skip the create/join
-            if (GameState.PlatformState is not null && Action != "rejoin")
-            {
-                _connecting = false;
-                await InvokeAsync(StateHasChanged);
-                RegisterVisibility();
-                return;
-            }
+            var queryGame = GetQueryParam("game");
+            var queryAction = Action ?? GetQueryParam("action");
+            var gameType = queryGame ?? Game ?? GameState.SelectedGameType ?? "standup";
+            GameState.SelectedGameType = gameType;
 
             if (string.IsNullOrEmpty(GameState.PlayerName))
             {
-                // Try restoring from localStorage
                 var savedName = await JS.InvokeAsync<string?>("localStorage.getItem", "sad_name");
                 if (!string.IsNullOrEmpty(savedName))
                     GameState.PlayerName = savedName;
                 else
                 {
-                    Nav.NavigateTo("/");
+                    var joinCode = queryAction == "join" && !string.IsNullOrEmpty(Code)
+                        ? Code
+                        : null;
+                    if (!string.IsNullOrEmpty(joinCode))
+                        Nav.NavigateTo($"/?join={Uri.EscapeDataString(joinCode.ToUpperInvariant())}");
+                    else
+                        Nav.NavigateTo("/");
                     return;
                 }
             }
 
-            var gameType = Game ?? GameState.SelectedGameType ?? "standup";
+            var playerName = GameState.PlayerName!;
+            var platform = GameState.PlatformState;
+            var switchingGame = platform is not null && platform.GameType != gameType;
+            var mustCreate = queryAction == "create" || switchingGame;
 
-            HubResult result;
-            if (Action == "create")
-                result = await Hub.CreateOrJoinAsync(null, GameState.PlayerName, gameType, false);
-            else if (Action == "join" && !string.IsNullOrEmpty(Code))
-                result = await Hub.JoinAsync(Code, GameState.PlayerName);
-            else if (Action == "rejoin" && !string.IsNullOrEmpty(Code))
-                result = await Hub.RejoinAsync(Code, GameState.PlayerName);
-            else if (Action is null && GameState.PlatformState is not null)
+            // Reuse current session when already in the right game and not explicitly creating
+            if (!mustCreate && platform is not null && platform.GameType == gameType && queryAction != "rejoin")
             {
-                // Navigated directly to /room while already in a game
                 _connecting = false;
                 await InvokeAsync(StateHasChanged);
                 RegisterVisibility();
                 return;
             }
-            else if (Action is null)
+
+            HubResult result;
+            if (mustCreate)
             {
-                // Page was refreshed — try to restore session from localStorage
+                if (platform is not null)
+                    await Hub.LeaveRoomGroupAsync(platform.RoomCode);
+                GameState.ClearRoomSession();
+                GameState.PlayerName = playerName;
+                GameState.SelectedGameType = gameType;
+                result = await Hub.CreateOrJoinAsync(null, playerName, gameType, false);
+            }
+            else if (queryAction == "join" && !string.IsNullOrEmpty(Code))
+                result = await Hub.JoinAsync(Code, playerName);
+            else if (queryAction == "rejoin" && !string.IsNullOrEmpty(Code))
+                result = await Hub.RejoinAsync(Code, playerName);
+            else if (queryAction is null)
+            {
                 var savedRoom = await JS.InvokeAsync<string?>("localStorage.getItem", "sad_room");
                 if (string.IsNullOrEmpty(savedRoom))
                 {
                     Nav.NavigateTo("/");
                     return;
                 }
-                result = await Hub.RejoinAsync(savedRoom, GameState.PlayerName);
+                result = await Hub.RejoinAsync(savedRoom, playerName);
             }
             else
             {
@@ -211,6 +227,9 @@ else
                 await InvokeAsync(StateHasChanged);
                 return;
             }
+
+            if (queryAction == "create")
+                await JS.InvokeVoidAsync("gameInterop.playSound", "confirm");
         }
         catch (Exception ex)
         {
@@ -339,6 +358,21 @@ else
         GameState.Clear();
         Nav.NavigateTo("/");
     }
+
+    private static string? GetQueryParam(string uriString, string key)
+    {
+        var query = new Uri(uriString).Query;
+        if (string.IsNullOrEmpty(query)) return null;
+        foreach (var segment in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = segment.Split('=', 2);
+            if (parts.Length == 2 && parts[0].Equals(key, StringComparison.OrdinalIgnoreCase))
+                return Uri.UnescapeDataString(parts[1]);
+        }
+        return null;
+    }
+
+    private string? GetQueryParam(string key) => GetQueryParam(Nav.Uri, key);
 
     private void OpenSettings() => _settingsModal?.Open();
 

@@ -41,18 +41,14 @@
             }
         </div>
 
-        <!-- 3D Card — entire card is the clickable element -->
+        <!-- 3D flip card — border lives inside each face for correct backface hiding -->
         <div class="card-flip-scene mb-6" @onclick="OnFlip">
             <div class="card-flip-inner @(standupState?.CardFlipped == true ? "flipped" : "")">
 
-                <!-- Front face (visible before flip): electric border card -->
+                <!-- Front face (visible before flip) -->
                 <div class="card-face card-face-front">
-                    <div class="electric-main-border"></div>
                     <div class="electric-glow-1"></div>
-                    <div class="electric-glow-2"></div>
-                    <div class="electric-overlay-1"></div>
-                    <div class="electric-overlay-2"></div>
-                    <div class="electric-bg-glow"></div>
+                    <div class="electric-main-border"></div>
                     <div class="electric-content">
                         <p class="text-4xl">🃏</p>
                         <p class="text-yellow-300 font-bold text-lg">@(_flipping ? "Flipping…" : "Tap to Flip")</p>
@@ -62,12 +58,8 @@
 
                 <!-- Back face (visible after flip): prompt card -->
                 <div class="card-face card-face-back">
-                    <div class="electric-main-border"></div>
                     <div class="electric-glow-1"></div>
-                    <div class="electric-glow-2"></div>
-                    <div class="electric-overlay-1"></div>
-                    <div class="electric-overlay-2"></div>
-                    <div class="electric-bg-glow"></div>
+                    <div class="electric-main-border"></div>
                     <div class="electric-content px-8">
                         @{
                             var cardParts = (standupState?.PromptCardText ?? "").Split("|||");

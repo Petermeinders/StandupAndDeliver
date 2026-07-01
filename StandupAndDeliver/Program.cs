@@ -42,6 +42,7 @@ builder.Services.AddSingleton<GameTimerService>();
 builder.Services.AddSingleton<ICardGame, StandupGame>();
 builder.Services.AddSingleton<ICardGame, OneOGame>();
 builder.Services.AddSingleton<ICardGame, CursedVaultGame>();
+builder.Services.AddSingleton<ICardGame, DefendFortressGame>();
 builder.Services.AddHostedService<RoomCleanupService>();
 
 var app = builder.Build();

@@ -9,7 +9,7 @@
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     <!-- Workaround for .NET 10 SDK static web asset fingerprinting/compression bugs in debug builds -->
     <CompressionEnabled Condition="'$(Configuration)' == 'Debug'">false</CompressionEnabled>
-    <WasmFingerprintAssets Condition="'$(Configuration)' == 'Debug'">false</WasmFingerprintAssets>
+    <WasmFingerprintAssets>false</WasmFingerprintAssets>
   </PropertyGroup>
 
   <ItemGroup>

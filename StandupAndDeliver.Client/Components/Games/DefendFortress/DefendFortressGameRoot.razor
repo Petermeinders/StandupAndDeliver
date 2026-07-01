@@ -1,0 +1,170 @@
+@inject GameStateService GameState
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+@using System.Text.Json
+
+@{
+    var gs = GameState.GetState<DefendFortressGameStateDto>("defend-fortress");
+}
+
+@if (gs is null)
+{
+    <div class="flex items-center justify-center h-64 text-gray-400">Loading fortress…</div>
+    return;
+}
+
+@if (gs.Phase == "GameOver")
+{
+    <div class="min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-white">
+        <p class="text-3xl font-bold">@(gs.ResultMessage ?? "Game Over")</p>
+        <p class="text-gray-400">Fortress HP: @gs.FortressHp / @gs.MaxFortressHp</p>
+        <div class="text-sm text-gray-500 space-y-1 text-center">
+            @foreach (var p in gs.Players)
+            {
+                <p>@p.Name — @p.Kills kills, @p.Breaches breaches</p>
+            }
+        </div>
+        <LeaveGameButton />
+    </div>
+    return;
+}
+
+<div class="flex flex-col min-h-screen text-white select-none">
+
+    @* ── Shared stats ticker ── *@
+    <div class="sticky top-12 z-40 bg-gray-950/95 border-b border-amber-900/50 px-3 py-2 space-y-1">
+        <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm font-mono">
+            <span class="text-amber-400">🏰 @gs.FortressHp/@gs.MaxFortressHp HP</span>
+            <span class="text-yellow-300">👾 @gs.TotalEnemiesRemaining total left</span>
+            <span class="text-cyan-300">@gs.ActiveEnemyCount on field</span>
+            <span class="text-gray-400">Wave @gs.Wave</span>
+            <span class="text-emerald-400">ping @_pingMs ms</span>
+            <span class="@(_lastActionMs > 150 ? "text-red-400" : "text-cyan-400")">action @_lastActionMs ms</span>
+            <span class="text-purple-400">sync @_syncAgeMs ms ago</span>
+        </div>
+        <div class="flex flex-wrap justify-center gap-2 text-xs text-gray-500">
+            @foreach (var p in gs.Players)
+            {
+                <span class="@(p.Name == GameState.PlayerName ? "text-amber-200" : "")">
+                    @p.Name: @p.Kills☠ @p.Breaches💥
+                </span>
+            }
+        </div>
+    </div>
+
+    <div class="flex items-center justify-between px-3 py-2 text-xs text-gray-500 gap-2 flex-wrap">
+        <span>Shared battlefield — purple = held by another player</span>
+        <label class="flex items-center gap-2 cursor-pointer text-gray-400 hover:text-gray-300">
+            <input type="checkbox"
+                   class="rounded border-gray-600 bg-gray-800 text-amber-500 focus:ring-amber-500/50"
+                   checked="@_interpolate"
+                   @onchange="OnInterpolateToggle" />
+            <span>Smooth interpolation</span>
+        </label>
+        <LeaveGameButton />
+    </div>
+
+    @* ── Canvas combat (server-synced) ── *@
+    <div class="flex-1 px-2 pb-4 min-h-[280px] bg-gray-950" style="height: 55vh">
+        <canvas id="fortress-canvas" class="w-full h-full rounded-lg border border-gray-700 touch-none bg-[#1a1410]"></canvas>
+    </div>
+
+    <p class="text-center text-xs text-gray-600 pb-4 px-4">
+        Toggle interpolation to compare snap vs smooth rendering. Grab hit-testing always uses server positions.
+    </p>
+</div>
+
+@code {
+    private const string CanvasId = "fortress-canvas";
+    private const string GameType = "defend-fortress";
+
+    [Parameter, EditorRequired] public Func<string, string?, Task<HubResult>> GameActionFunc { get; set; } = default!;
+
+    private DotNetObjectReference<DefendFortressGameRoot>? _dotNetRef;
+    private bool _canvasStarted;
+    private int _pingMs;
+    private int _lastActionMs;
+    private CancellationTokenSource? _pingCts;
+    private int _lastServerTick = -1;
+    private bool _interpolate;
+
+    private static readonly JsonSerializerOptions CamelJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            _pingCts = new CancellationTokenSource();
+            _ = PingLoop(_pingCts.Token);
+        }
+
+        var gs = GameState.GetState<DefendFortressGameStateDto>(GameType);
+        if (gs is null || gs.Phase == "GameOver") return;
+
+        if (!_canvasStarted && _dotNetRef is not null)
+        {
+            try
+            {
+                var ok = await JS.InvokeAsync<bool>("fortressInterop.start", CanvasId, _dotNetRef, GameState.PlayerName ?? "Player");
+                if (ok) _canvasStarted = true;
+            }
+            catch (JSException ex)
+            {
+                Console.WriteLine($"[DefendFortress] canvas start failed: {ex.Message}");
+            }
+        }
+
+        if (_canvasStarted && gs.ServerTick != _lastServerTick)
+        {
+            _syncAgeMs = (int)(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - gs.ServerTimeMs);
+            _lastServerTick = gs.ServerTick;
+            var enemiesJson = JsonSerializer.Serialize(gs.Enemies, CamelJson);
+            await JS.InvokeVoidAsync("fortressInterop.syncState", CanvasId, enemiesJson, gs.WorldWidth, gs.WorldHeight);
+        }
+    }
+
+    private int _syncAgeMs;
+
+    private async Task OnInterpolateToggle(ChangeEventArgs e)
+    {
+        _interpolate = e.Value is true;
+        if (_canvasStarted)
+            await JS.InvokeVoidAsync("fortressInterop.setInterpolation", CanvasId, _interpolate);
+    }
+
+    [JSInvokable]
+    public async Task<bool> OnFortressAction(string action, string payloadJson)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var result = await GameActionFunc(action, payloadJson);
+        _lastActionMs = (int)sw.ElapsedMilliseconds;
+        await InvokeAsync(StateHasChanged);
+        return result.Success;
+    }
+
+    private async Task PingLoop(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(2000, ct);
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                await GameActionFunc("Ping", null);
+                _pingMs = (int)sw.ElapsedMilliseconds;
+                await InvokeAsync(StateHasChanged);
+            }
+            catch (OperationCanceledException) { break; }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _pingCts?.Cancel();
+        _pingCts?.Dispose();
+        if (_canvasStarted)
+            await JS.InvokeVoidAsync("fortressInterop.stop", CanvasId);
+        _dotNetRef?.Dispose();
+    }
+}

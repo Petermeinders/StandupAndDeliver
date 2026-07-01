@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using StandupAndDeliver.Client.Components.Games.DefendFortress;
 using StandupAndDeliver.Client.Components.Games.CursedVault;
 using StandupAndDeliver.Client.Components.Games.OneO;
 using StandupAndDeliver.Client.Components.Games.Standup;
@@ -37,6 +38,13 @@ registry.Register(new GameRegistration(
     ImageUrl: "/CursedVaultCover.webp",
     Icon: "☠️",
     ComponentType: typeof(CursedVaultGameRoot)));
+registry.Register(new GameRegistration(
+    Id: "defend-fortress",
+    Name: "Defend Thy Fortress",
+    Tagline: "Co-op prototype — test latency & combat feel",
+    ImageUrl: null,
+    Icon: "🏰",
+    ComponentType: typeof(DefendFortressGameRoot)));
 
 builder.Services.AddSingleton(registry);
 

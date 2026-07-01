@@ -10,6 +10,8 @@ public class GameStateService
     public GameStateDto? PlatformState { get; private set; }
     public string? PlayerName { get; set; }
     public string SelectedGameType { get; set; } = "standup";
+    /// <summary>Room code from an invite link / QR scan — join this room after name entry.</summary>
+    public string? PendingJoinCode { get; set; }
     public int SecondsRemaining { get; private set; }
 
     private readonly Dictionary<string, string> _gameStates = new();
@@ -71,6 +73,17 @@ public class GameStateService
     }
 
     public void Clear()
+    {
+        PlatformState = null;
+        PendingJoinCode = null;
+        _gameStates.Clear();
+        SecondsRemaining = 0;
+        CurrentTranscript = "";
+        _reactions.Clear();
+    }
+
+    /// <summary>Clears room/game state but keeps player name and selected game type.</summary>
+    public void ClearRoomSession()
     {
         PlatformState = null;
         _gameStates.Clear();

@@ -21,4 +21,9 @@ public class GameRegistry
 
     public GameRegistration? Get(string gameType) =>
         _games.FirstOrDefault(g => g.Id == gameType);
+
+    public string GetBackgroundStyle(string? gameType) =>
+        Get(gameType ?? "")?.ImageUrl is { } img
+            ? $"background-image: url('{img}')"
+            : "background-image: url('/OfficeBackground.jpg')";
 }
