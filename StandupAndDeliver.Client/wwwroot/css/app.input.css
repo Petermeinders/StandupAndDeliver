@@ -590,3 +590,261 @@ body.theme-w95 .overflow-hidden {
     text-align: center;
     margin: 0;
 }
+
+/* Protect Thy Fortress — force-landscape mobile UX (2026-07-03 revision).
+   The old "rotate your device" overlay (blocked play + `(hover: none) and (pointer: coarse)`
+   false-positived on plenty of touchscreen laptops even with a mouse in hand) is gone. Instead the
+   battlefield/shop views always render as landscape: on an actual mobile phone held portrait, the
+   view is rotated 90° via CSS to fill the screen sideways, so the player sees a sideways UI and
+   naturally turns the phone to read it right-side up — no blocking prompt needed. Scoped to
+   `html.fortress-is-mobile` (UA-sniff + touch check in fortress-prototype.js) so desktop/laptop
+   users never see any of this. The Artillery seat is intentionally excluded — it's meant to be
+   played in portrait already, so it just renders normally in whatever orientation the phone is in.
+
+   Lives here rather than DefendFortressGameRoot.razor.css because it needs to match
+   `html.fortress-is-mobile` as an ancestor selector — Blazor's CSS isolation scopes every selector
+   in a .razor.css file with an attribute selector (`.foo[b-xxxx]`), which breaks ancestor-combinator
+   specificity, and `:global()` (a CSS-modules/Vue convention) isn't supported by Blazor's isolation
+   tooling — it passes through unprocessed as invalid CSS and silently matches nothing. */
+@media (orientation: portrait) and (max-width: 767px) {
+    html.fortress-is-mobile .fortress-landscape-lock {
+        position: fixed;
+        inset: 0;
+        width: 100vh;
+        height: 100vw;
+        transform: rotate(90deg) translateY(-100%);
+        transform-origin: top left;
+        z-index: 60;
+    }
+}
+
+/* Protect Thy Fortress — immersive combat shell + floating HUD */
+.fortress-immersive-room {
+    --fortress-header-height: 3rem;
+    position: relative;
+    z-index: 1;
+    min-height: 100dvh;
+}
+
+/* Host for the combat shell — no screen-fade transform (breaks position:fixed) */
+.fortress-game-host {
+    position: relative;
+    transform: none;
+    animation: none;
+}
+
+.fortress-combat-shell {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+    background: #0a0a0a;
+}
+
+.fortress-combat-view {
+    position: absolute;
+    inset: 0;
+}
+
+.fortress-combat-view.fortress-artillery-gate {
+    background: #0d1a14;
+}
+
+.fortress-hud-toggle {
+    position: absolute;
+    top: calc(0.35rem + env(safe-area-inset-top, 0px));
+    left: calc(0.5rem + env(safe-area-inset-left, 0px));
+    z-index: 110;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(12, 10, 8, 0.55);
+    color: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.fortress-hud-toggle:hover {
+    background: rgba(24, 20, 16, 0.78);
+}
+
+.fortress-hud-toggle:active {
+    transform: scale(0.94);
+}
+
+.fortress-hud-chevron {
+    width: 1.1rem;
+    height: 1.1rem;
+    transition: transform 0.2s ease;
+}
+
+.fortress-hud-chevron.is-open {
+    transform: rotate(180deg);
+}
+
+.fortress-hud-paused-dot {
+    position: absolute;
+    top: 0.2rem;
+    right: 0.2rem;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 9999px;
+    background: #fbbf24;
+    box-shadow: 0 0 6px rgba(251, 191, 36, 0.8);
+}
+
+.fortress-hud-panel {
+    position: absolute;
+    top: calc(2.75rem + env(safe-area-inset-top, 0px));
+    left: env(safe-area-inset-left, 0px);
+    right: env(safe-area-inset-right, 0px);
+    z-index: 105;
+    max-height: min(48vh, 14rem);
+    overflow-y: auto;
+    background: rgba(8, 6, 4, 0.94);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(245, 158, 11, 0.35);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+    animation: fortressHudSlide 0.2s ease-out;
+}
+
+/* Portrait — header in document flow; canvas fills space below it */
+@media (orientation: portrait) {
+    .fortress-immersive-room > header {
+        position: relative !important;
+        top: auto !important;
+        z-index: 100;
+        background: rgba(3, 7, 18, 0.95) !important;
+    }
+
+    .fortress-immersive-room .fortress-immersive-content {
+        min-height: calc(100dvh - var(--fortress-header-height) - env(safe-area-inset-top, 0px));
+    }
+
+    .fortress-immersive-room .fortress-game-host {
+        min-height: calc(100dvh - var(--fortress-header-height) - env(safe-area-inset-top, 0px));
+    }
+
+    .fortress-immersive-room .fortress-combat-shell,
+    .fortress-immersive-room .fortress-combat-shell.fortress-combat-fullscreen {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+    }
+}
+
+/* Landscape — semi-transparent header overlays full-height canvas; HUD sits below header */
+@media (orientation: landscape) {
+    .fortress-immersive-room > header {
+        position: fixed !important;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 120;
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-left: env(safe-area-inset-left, 0px);
+        padding-right: env(safe-area-inset-right, 0px);
+        background: rgba(3, 7, 18, 0.5) !important;
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        border-bottom-color: rgba(31, 41, 55, 0.45) !important;
+        transition: background 0.2s ease;
+    }
+
+    .fortress-immersive-room > header:hover,
+    .fortress-immersive-room > header.fortress-header-interactive {
+        background: rgba(3, 7, 18, 0.92) !important;
+    }
+
+    .fortress-immersive-room .fortress-combat-shell,
+    .fortress-immersive-room .fortress-combat-shell.fortress-combat-fullscreen {
+        inset: 0 !important;
+        z-index: 90 !important;
+    }
+
+    .fortress-immersive-room .fortress-hud-toggle {
+        top: calc(var(--fortress-header-height) + env(safe-area-inset-top, 0px) + 0.35rem);
+    }
+
+    .fortress-immersive-room .fortress-hud-panel {
+        top: calc(var(--fortress-header-height) + env(safe-area-inset-top, 0px));
+    }
+}
+
+@keyframes fortressHudSlide {
+    from {
+        opacity: 0;
+        transform: translateY(-0.5rem);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Protect Thy Fortress — immersive combat fullscreen (mobile landscape + Android native FS) */
+.fortress-combat-fullscreen {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    z-index: 90;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #0a0a0a;
+}
+
+html.fortress-combat-active {
+    overflow: hidden;
+    background: #0a0a0a;
+}
+
+html.fortress-combat-active .fortress-combat-fullscreen .fortress-combat-view {
+    inset: 0;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+html.fortress-combat-active .fortress-combat-fullscreen canvas {
+    border-radius: 0;
+    border: none;
+}
+
+/* Same force-landscape rotate as `.fortress-landscape-lock` above, but for the canvas combat shell
+   specifically — it already gets `.fortress-combat-fullscreen` (position:fixed, 100vw/100dvh) from
+   fortress-prototype.js on every combat start, mobile or not, so this augments that existing rule
+   in place (same selector, later in the cascade) rather than fighting it with a second `!important`
+   rule elsewhere. */
+@media (orientation: portrait) and (max-width: 767px) {
+    html.fortress-is-mobile .fortress-combat-fullscreen {
+        width: 100vh !important;
+        height: 100vw !important;
+        transform: rotate(90deg) translateY(-100%);
+        transform-origin: top left;
+    }
+
+    /* Immersive portrait layout: header in flow, canvas below — no force-landscape rotate */
+    html.fortress-is-mobile .fortress-immersive-room .fortress-combat-shell.fortress-combat-fullscreen {
+        width: 100vw !important;
+        height: auto !important;
+        max-height: none !important;
+        transform: none !important;
+        transform-origin: unset !important;
+    }
+}

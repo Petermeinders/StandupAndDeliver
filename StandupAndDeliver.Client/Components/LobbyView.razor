@@ -3,6 +3,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject PlayerSettingsService PlayerSettings
+@inject StandupAndDeliver.Client.Services.HubService Hub
 
 @{
     var gameType = GameState.PlatformState?.GameType;
@@ -70,6 +71,44 @@
             </div>
         }
 
+        @if (gameType == "defend-fortress")
+        {
+            <div class="bg-gray-900 rounded-2xl p-5 mb-6">
+                <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-3">Game Mode</h2>
+                <select class="w-full bg-gray-800 text-white rounded-lg px-3 py-2 border border-gray-700"
+                        value="@_fortressGameMode"
+                        @onchange="OnFortressGameModeChanged">
+                    <option value="10">10 Waves</option>
+                    <option value="50">50 Waves</option>
+                    <option value="100">100 Waves</option>
+                    <option value="endless">Endless Survival</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-1.5">Clear the target wave count to win, or survive endlessly for a high score.</p>
+            </div>
+
+            <div class="bg-gray-900 rounded-2xl p-5 mb-6">
+                <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-3">
+                    Artillery seat <span class="text-gray-600 normal-case font-normal">(experimental — top-down slingshot)</span>
+                </h2>
+                <label class="flex items-center justify-between gap-3 cursor-pointer">
+                    <span class="text-white text-sm font-medium">Start wave 1 as Artillery</span>
+                    <input type="checkbox"
+                           checked="@_wantsArtillery"
+                           @onchange="OnArtilleryPreferenceChanged"
+                           class="w-4 h-4 accent-yellow-400" />
+                </label>
+                <p class="text-xs text-gray-500 mt-1.5">
+                    Only one seat — first player to check this box holds it when the run starts. You can also
+                    volunteer later from the in-game shop between waves.
+                </p>
+                @{ var artilleryClaimant = GameState.PlatformState?.Players.FirstOrDefault(p => p.PreferredRole == "artillery"); }
+                @if (artilleryClaimant is not null)
+                {
+                    <p class="text-xs text-amber-400 mt-1">@artilleryClaimant.Name will start as Artillery.</p>
+                }
+            </div>
+        }
+
         @if (_isHost)
         {
             <div class="text-center">
@@ -105,6 +144,8 @@
     private bool _starting;
     private bool _copied;
     private string? _error;
+    private string _fortressGameMode = "10";
+    private bool _wantsArtillery;
 
     private string JoinUrl =>
         $"{Nav.BaseUri.TrimEnd('/')}?join={GameState.PlatformState?.RoomCode}";
@@ -121,6 +162,8 @@
     {
         _isHost = GameState.PlatformState?.Players
             .Any(p => p.Name == GameState.PlayerName && p.IsHost) ?? false;
+        _wantsArtillery = GameState.PlatformState?.Players
+            .Any(p => p.Name == GameState.PlayerName && p.PreferredRole == "artillery") ?? false;
     }
 
     private async Task CopyJoinUrl()
@@ -137,6 +180,24 @@
         await PlayerSettings.SetOneONumbersOnlyAsync((bool)(e.Value ?? false));
     }
 
+    private void OnFortressGameModeChanged(ChangeEventArgs e)
+    {
+        _fortressGameMode = e.Value?.ToString() ?? "10";
+    }
+
+    private async Task OnArtilleryPreferenceChanged(ChangeEventArgs e)
+    {
+        var wants = e.Value is true;
+        var result = await Hub.SetPreferredRoleAsync(wants ? "artillery" : null);
+        if (!result.Success)
+        {
+            _error = result.Error;
+            return; // leave _wantsArtillery as-is; next platform-state broadcast will resync the checkbox
+        }
+        _wantsArtillery = wants;
+        _error = null;
+    }
+
     private async Task OnStartGame()
     {
         _starting = true;
@@ -146,6 +207,7 @@
         string? settingsJson = gameType switch
         {
             "OneO" => PlayerSettings.GetOneOSettingsJson(),
+            "defend-fortress" => System.Text.Json.JsonSerializer.Serialize(new { gameMode = _fortressGameMode }),
             _ => null
         };
         var result = await StartGameFunc(settingsJson);

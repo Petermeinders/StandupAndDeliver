@@ -1,0 +1,129 @@
+@inject IJSRuntime JS
+
+@if (Open)
+{
+    <div class="fixed inset-0 bg-black/75 flex items-end sm:items-center justify-center z-[130] p-4" @onclick="Close">
+        <div class="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden" @onclick:stopPropagation>
+            <div class="px-6 pt-6 pb-4 border-b border-gray-800">
+                <h2 class="text-lg font-bold text-white">Add to your phone</h2>
+                <p class="text-sm text-gray-400 mt-1">Install Fireside Arcade for fullscreen play without the browser bar.</p>
+            </div>
+
+            <div class="px-6 py-5 space-y-4 text-sm text-gray-300">
+                @if (_platform == "ios")
+                {
+                    <ol class="space-y-3 list-none">
+                        <li class="flex gap-3">
+                            <span class="shrink-0 w-7 h-7 rounded-full bg-gray-800 text-amber-400 font-bold flex items-center justify-center text-xs">1</span>
+                            <span>Tap the <strong class="text-white">Share</strong> button in Safari's toolbar (square with arrow pointing up).</span>
+                        </li>
+                        <li class="flex gap-3">
+                            <span class="shrink-0 w-7 h-7 rounded-full bg-gray-800 text-amber-400 font-bold flex items-center justify-center text-xs">2</span>
+                            <span>Scroll down and tap <strong class="text-white">Add to Home Screen</strong>.</span>
+                        </li>
+                        <li class="flex gap-3">
+                            <span class="shrink-0 w-7 h-7 rounded-full bg-gray-800 text-amber-400 font-bold flex items-center justify-center text-xs">3</span>
+                            <span>Tap <strong class="text-white">Add</strong> — the app opens like a native game, with more screen space for landscape battles.</span>
+                        </li>
+                    </ol>
+                    <p class="text-xs text-gray-500">Tip: rotate to landscape in Protect Thy Fortress for the full battlefield view.</p>
+                }
+                else if (_platform == "android")
+                {
+                    @if (_canNativeInstall)
+                    {
+                        <p>Chrome can install this app directly — no app store needed.</p>
+                        <button type="button"
+                                disabled="@_installing"
+                                @onclick="NativeInstallAsync"
+                                class="w-full py-3 rounded-xl bg-yellow-400 text-black font-bold hover:bg-yellow-300 transition-all disabled:opacity-50">
+                            @(_installing ? "Installing…" : "Install app")
+                        </button>
+                        <p class="text-xs text-gray-500 text-center">or add manually:</p>
+                    }
+                    <ol class="space-y-3 list-none">
+                        <li class="flex gap-3">
+                            <span class="shrink-0 w-7 h-7 rounded-full bg-gray-800 text-amber-400 font-bold flex items-center justify-center text-xs">1</span>
+                            <span>Open the browser <strong class="text-white">⋮ menu</strong> (top right in Chrome).</span>
+                        </li>
+                        <li class="flex gap-3">
+                            <span class="shrink-0 w-7 h-7 rounded-full bg-gray-800 text-amber-400 font-bold flex items-center justify-center text-xs">2</span>
+                            <span>Tap <strong class="text-white">Install app</strong> or <strong class="text-white">Add to Home screen</strong>.</span>
+                        </li>
+                        <li class="flex gap-3">
+                            <span class="shrink-0 w-7 h-7 rounded-full bg-gray-800 text-amber-400 font-bold flex items-center justify-center text-xs">3</span>
+                            <span>Confirm — launch from your home screen for the best fullscreen experience.</span>
+                        </li>
+                    </ol>
+                }
+                else
+                {
+                    <p>On a phone or tablet, open this site in <strong class="text-white">Safari</strong> (iPhone) or <strong class="text-white">Chrome</strong> (Android), then use the menu option to add it to your home screen.</p>
+                    @if (_canNativeInstall)
+                    {
+                        <button type="button"
+                                disabled="@_installing"
+                                @onclick="NativeInstallAsync"
+                                class="w-full py-3 rounded-xl bg-yellow-400 text-black font-bold hover:bg-yellow-300 transition-all disabled:opacity-50">
+                            @(_installing ? "Installing…" : "Install app")
+                        </button>
+                    }
+                }
+            </div>
+
+            <div class="px-6 pb-6">
+                <button type="button" @onclick="Close"
+                        class="w-full py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold transition-all">
+                    Got it
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    private string _platform = "other";
+    private bool _canNativeInstall;
+    private bool _installing;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Open) return;
+        try
+        {
+            var info = await JS.InvokeAsync<PwaInstallInfo>("gameInterop.getPwaInstallInfo");
+            _platform = info.Platform;
+            _canNativeInstall = info.CanNativeInstall;
+        }
+        catch
+        {
+            _platform = "other";
+            _canNativeInstall = false;
+        }
+    }
+
+    private async Task NativeInstallAsync()
+    {
+        _installing = true;
+        try
+        {
+            var outcome = await JS.InvokeAsync<string>("gameInterop.promptPwaInstall");
+            if (outcome == "accepted")
+                await Close();
+        }
+        finally
+        {
+            _installing = false;
+        }
+    }
+
+    private async Task Close()
+    {
+        await OpenChanged.InvokeAsync(false);
+    }
+
+    private sealed record PwaInstallInfo(bool IsStandalone, string Platform, bool CanNativeInstall, bool ShowAddToPhone);
+}

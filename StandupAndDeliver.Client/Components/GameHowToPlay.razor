@@ -127,6 +127,30 @@ else if (GameId == "cursed-vault")
         }
     </div>
 }
+else if (GameId == "defend-fortress")
+{
+    <div class="bg-gray-900 bg-opacity-80 rounded-2xl mb-3 overflow-hidden">
+        <button @onclick="() => _howToPlayOpen = !_howToPlayOpen"
+                class="w-full flex items-center justify-between px-6 py-4 text-left">
+            <span class="font-semibold text-yellow-400">How to play</span>
+            <span class="text-gray-500 text-lg transition-transform @(_howToPlayOpen ? "rotate-180" : "")">▾</span>
+        </button>
+        @if (_howToPlayOpen)
+        {
+            <div class="px-6 pb-5 text-sm text-gray-400 space-y-3 border-t border-gray-800 pt-4">
+                <p>Up to <span class="text-gray-300 font-semibold">4 players</span> defend one shared castle. Invaders march in from the left — <span class="text-gray-300 font-semibold">grab, drag, and fling</span> them before they reach the gate.</p>
+                <p>Every enemy that touches the castle costs you fortress HP. Clear the whole wave (no enemies left marching or waiting to spawn) with HP to spare and you move to the <span class="text-gray-300 font-semibold">shop</span>.</p>
+                <div class="space-y-1 text-xs">
+                    <p class="text-gray-500 font-semibold uppercase tracking-wider mb-2">Between waves</p>
+                    <p><span class="text-white font-semibold">Gold is personal</span> — a kill you fling yourself pays you directly; kills from archers/soldiers/ballistas split evenly across everyone still playing.</p>
+                    <p><span class="text-white font-semibold">Spend your own gold</span> on uncapped upgrades: more archers (fire rate), thicker walls (max HP), repairs, soldiers, and ballistas.</p>
+                    <p><span class="text-white font-semibold">Ready up</span> when you want to fight — the next wave starts once everyone's ready, or the host can force-start early.</p>
+                </div>
+                <p class="text-gray-500 text-xs">Choose your mode in the lobby: 10 / 50 / 100 waves, or endless survival for a high score. Fortress HP hits 0 → game over.</p>
+            </div>
+        }
+    </div>
+}
 else if (GameId == "crypt-sweepers")
 {
     <div class="bg-gray-900 rounded-2xl mb-3 overflow-hidden">

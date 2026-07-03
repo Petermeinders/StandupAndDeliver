@@ -120,6 +120,39 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext, GameRoomServ
 
     public Task OnPlayerGraceExpired(GameRoom room, string playerName, bool wasHost) => Task.CompletedTask;
 
+    /// <summary>Host-triggered Drop: discards the player's hand and permanently skips their seat in
+    /// turn order. Unlike a disconnect (which just pauses the game on their turn, by design), this
+    /// is a deliberate "they're not coming back" call.</summary>
+    public async Task OnPlayerDropped(GameRoom room, string playerName)
+    {
+        if (!_states.TryGetValue(room.RoomCode, out var state)) return;
+        if (room.Phase != GamePhase.Playing || state.DroppedPlayers.Contains(playerName)) return;
+
+        state.DroppedPlayers.Add(playerName);
+        state.PlayerHands.Remove(playerName);
+        state.LastAction = $"{playerName} was dropped from the game.";
+
+        var remaining = room.Players.Where(p => !state.DroppedPlayers.Contains(p.Name)).ToList();
+        if (remaining.Count <= 1)
+        {
+            state.WinnerName = remaining.Count == 1 ? remaining[0].Name : null;
+            room.Phase = GamePhase.GameOver;
+            state.LastAction = remaining.Count == 1
+                ? $"{remaining[0].Name} wins — everyone else was dropped!"
+                : "Game over — all players dropped.";
+            await BroadcastState(room, state);
+            ScheduleLobbyReset(room);
+            return;
+        }
+
+        var droppedIndex = room.Players.FindIndex(p => p.Name == playerName);
+        if (droppedIndex == state.CurrentPlayerIndex)
+            state.CurrentPlayerIndex = NextPlayerIndex(room, state, from: state.CurrentPlayerIndex);
+
+        await BroadcastState(room, state);
+        MaybeScheduleBotTurn(room, state);
+    }
+
     // ── Game actions ──────────────────────────────────────────────────────────
 
     private async Task<HubResult> PlayCard(GameRoom room, OneOGameState state, string connectionId, string? payloadJson)
@@ -174,19 +207,19 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext, GameRoomServ
         }
 
         state.LastAction = $"{currentPlayer.Name} played {CardName(card)}";
-        int nextIndex = NextPlayerIndex(state, room.Players.Count);
+        int nextIndex = NextPlayerIndex(room, state);
 
         if (card.Type == OneOCardType.Skip)
         {
             state.LastAction += " — next player skipped!";
-            nextIndex = NextPlayerIndex(state, room.Players.Count, from: nextIndex);
+            nextIndex = NextPlayerIndex(room, state, from: nextIndex);
         }
         else if (card.Type == OneOCardType.Reverse)
         {
             state.Clockwise = !state.Clockwise;
             nextIndex = room.Players.Count == 2
                 ? state.CurrentPlayerIndex
-                : NextPlayerIndex(state, room.Players.Count);
+                : NextPlayerIndex(room, state);
             state.LastAction += " — direction reversed!";
         }
         else if (card.Type == OneOCardType.DrawTwo)
@@ -194,14 +227,14 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext, GameRoomServ
             var target = room.Players[nextIndex];
             DrawCardsToPlayer(state, target.Name, 2);
             state.LastAction += $" — {target.Name} draws 2 and is skipped!";
-            nextIndex = NextPlayerIndex(state, room.Players.Count, from: nextIndex);
+            nextIndex = NextPlayerIndex(room, state, from: nextIndex);
         }
         else if (card.Type == OneOCardType.WildDrawFour)
         {
             var target = room.Players[nextIndex];
             DrawCardsToPlayer(state, target.Name, 4);
             state.LastAction += $" — {target.Name} draws 4 and is skipped!";
-            nextIndex = NextPlayerIndex(state, room.Players.Count, from: nextIndex);
+            nextIndex = NextPlayerIndex(room, state, from: nextIndex);
         }
 
         state.CurrentPlayerIndex = nextIndex;
@@ -231,7 +264,7 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext, GameRoomServ
         else
         {
             state.LastAction = $"{currentPlayer.Name} drew — no play, turn passes.";
-            state.CurrentPlayerIndex = NextPlayerIndex(state, room.Players.Count);
+            state.CurrentPlayerIndex = NextPlayerIndex(room, state);
         }
 
         await BroadcastState(room, state);
@@ -460,12 +493,19 @@ public class OneOGame(IHubContext<GameHub, IGameClient> hubContext, GameRoomServ
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static int NextPlayerIndex(OneOGameState state, int playerCount, int? from = null)
+    /// <summary>Skips seats in <see cref="OneOGameState.DroppedPlayers"/> — a dropped player's turn
+    /// is never landed on again. Falls back to the raw next-index if somehow everyone is dropped
+    /// (shouldn't happen — dropping down to 1 remaining player ends the game).</summary>
+    private static int NextPlayerIndex(GameRoom room, OneOGameState state, int? from = null)
     {
+        int count = room.Players.Count;
         int current = from ?? state.CurrentPlayerIndex;
-        return state.Clockwise
-            ? (current + 1) % playerCount
-            : (current - 1 + playerCount) % playerCount;
+        for (int i = 0; i < count; i++)
+        {
+            current = state.Clockwise ? (current + 1) % count : (current - 1 + count) % count;
+            if (!state.DroppedPlayers.Contains(room.Players[current].Name)) return current;
+        }
+        return current;
     }
 
     private static void DrawCardsToPlayer(OneOGameState state, string playerName, int count)

@@ -35,8 +35,9 @@ public class GameRoomService
         {
             CancelEmptyRoomTimer(code);
             var humanCount = existing.Players.Count(p => !p.IsBot);
-            if (humanCount >= 8)
-                return (null, code, false, "Room is full (max 8 players).");
+            var maxPlayers = MaxHumanPlayers(existing.GameType);
+            if (humanCount >= maxPlayers)
+                return (null, code, false, $"Room is full (max {maxPlayers} players).");
             if (!existing.Players.Any(p => p.Name.Equals(playerName, StringComparison.OrdinalIgnoreCase)))
             {
                 existing.Players.Add(new Player { Name = playerName, ConnectionId = connectionId });
@@ -67,12 +68,20 @@ public class GameRoomService
         return (room, code);
     }
 
+    /// <summary>Games that allow players to join mid-run (as spectators — see <see cref="Games.ICardGame.OnPlayerJoined"/>).</summary>
+    private static readonly HashSet<string> MidRunJoinableGameTypes = ["defend-fortress"];
+
+    private static int MaxHumanPlayers(string gameType) => gameType == "defend-fortress" ? 4 : 8;
+
     public (GameRoom? Room, HubResult Result) JoinRoom(string roomCode, string playerName, string connectionId)
     {
         var room = GetRoom(roomCode);
         if (room is null) return (null, new HubResult(false, "Room not found or has expired."));
-        if (room.Phase != GamePhase.Lobby) return (null, new HubResult(false, "Game already in progress."));
-        if (room.Players.Count(p => !p.IsBot) >= 8) return (null, new HubResult(false, "Room is full (max 8 players)."));
+        if (room.Phase != GamePhase.Lobby && !MidRunJoinableGameTypes.Contains(room.GameType))
+            return (null, new HubResult(false, "Game already in progress."));
+        var maxPlayers = MaxHumanPlayers(room.GameType);
+        if (room.Players.Count(p => !p.IsBot) >= maxPlayers)
+            return (null, new HubResult(false, $"Room is full (max {maxPlayers} players)."));
         if (room.Players.Any(p => p.Name.Equals(playerName, StringComparison.OrdinalIgnoreCase)))
             return (null, new HubResult(false, "That name is already taken in this room."));
 
@@ -104,7 +113,7 @@ public class GameRoomService
         var player = room.Players.FirstOrDefault(p => p.ConnectionId == connectionId);
         if (player is null || !player.IsHost) return (null, new HubResult(false, "Only the host can start the game."));
         if (room.Phase != GamePhase.Lobby) return (null, new HubResult(false, "Game already started."));
-        if (room.Players.Count(p => p.IsConnected) < 1) return (null, new HubResult(false, "At least 1 player is required to start."));
+        if (room.Players.Count(p => p.IsConnected && !p.AwayFromGame) < 1) return (null, new HubResult(false, "At least 1 player is required to start."));
 
         // Mark as starting immediately so concurrent calls can't pass the Lobby check twice.
         room.Phase = GamePhase.Playing;
@@ -116,6 +125,39 @@ public class GameRoomService
 
     public bool RemoveRoom(string roomCode) =>
         _rooms.TryRemove(roomCode.ToUpperInvariant(), out _);
+
+    /// <summary>Full, permanent removal for the deliberate "Leave Room"/host-Drop-from-room actions
+    /// — unlike a network disconnect (which keeps the player row around for the reconnect grace
+    /// period), the player row is dropped outright. Purges the room immediately if that was the last
+    /// human, rather than waiting for <see cref="StartEmptyRoomTimer"/>'s 5-minute countdown.
+    /// Auto-promotes the next connected human to host if the removed player was the host.</summary>
+    public void RemovePlayer(GameRoom room, Player player)
+    {
+        CancelGracePeriod(room.RoomCode, player.Name);
+        var wasHost = player.IsHost;
+        room.Players.Remove(player);
+        room.LastActivity = DateTime.UtcNow;
+
+        if (!room.Players.Any(p => p.IsConnected && !p.IsBot))
+        {
+            CancelEmptyRoomTimer(room.RoomCode);
+            RemoveRoom(room.RoomCode);
+            return;
+        }
+
+        if (wasHost && !room.Players.Any(p => p.IsHost))
+        {
+            var next = room.Players.FirstOrDefault(p => p.IsConnected && !p.IsBot);
+            if (next is not null) next.IsHost = true;
+        }
+    }
+
+    public void RemovePlayerByConnectionId(string roomCode, string connectionId)
+    {
+        var room = GetRoom(roomCode);
+        var player = room?.Players.FirstOrDefault(p => p.ConnectionId == connectionId);
+        if (room is not null && player is not null) RemovePlayer(room, player);
+    }
 
     /// Starts a 30-second grace period; calls <paramref name="onExpired"/> if the player doesn't rejoin.
     public void StartGracePeriod(string roomCode, string playerName, Func<Task> onExpired)

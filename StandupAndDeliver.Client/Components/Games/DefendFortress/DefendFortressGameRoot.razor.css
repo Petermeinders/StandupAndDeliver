@@ -1,0 +1,3 @@
+/* Mobile orientation gate rules used to live here, but Blazor's CSS isolation scoping breaks the
+   ancestor-selector match against `html.fortress-is-mobile` (see app.input.css for the full
+   explanation and the actual rules) — moved to the global stylesheet instead. */

@@ -6,7 +6,8 @@ public record GameRegistration(
     string Tagline,
     string? ImageUrl,
     string Icon,
-    Type ComponentType);
+    Type ComponentType,
+    bool IsExperimental = false);
 
 public class GameRegistry
 {

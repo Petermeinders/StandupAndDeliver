@@ -1,4 +1,5 @@
 @inject ToastService Toast
+@inject HttpClient Http
 @implements IDisposable
 
 @if (_open)
@@ -11,7 +12,17 @@
 
         @* Header *@
         <div class="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
-            <h2 class="text-base font-bold text-white">Activity Log</h2>
+            <div class="flex items-center gap-2">
+                <h2 class="text-base font-bold text-white">Activity Log</h2>
+                @if (_activePlayers is not null)
+                {
+                    <span class="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-950/60 rounded-full px-2 py-0.5"
+                          title="Unique players seen in the last @_windowMinutes minutes">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                        @_activePlayers active
+                    </span>
+                }
+            </div>
             <div class="flex items-center gap-3">
                 @if (Toast.Log.Count > 0)
                 {
@@ -58,12 +69,33 @@
 
 @code {
     private bool _open;
+    private int? _activePlayers;
+    private int _windowMinutes = 30;
 
     public void Open()
     {
         _open = true;
         InvokeAsync(StateHasChanged);
+        _ = LoadActivePlayerCountAsync();
     }
+
+    private async Task LoadActivePlayerCountAsync()
+    {
+        try
+        {
+            var stats = await Http.GetFromJsonAsync<ActivePlayerStats>("api/stats/active-players");
+            if (stats is null) return;
+            _activePlayers = stats.UniquePlayers;
+            _windowMinutes = stats.WindowMinutes;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            // Non-critical UI stat — leave it hidden if the request fails.
+        }
+    }
+
+    private record ActivePlayerStats(int UniquePlayers, int WindowMinutes);
 
     public void Close()
     {

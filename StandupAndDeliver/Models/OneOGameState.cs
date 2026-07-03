@@ -12,4 +12,8 @@ public class OneOGameState
     public string? LastAction { get; set; }
     public OneOCard? LastPlayedCard { get; set; }
     public bool NumbersOnly { get; set; }
+    /// <summary>Host-dropped players — their hand is discarded and turn order skips their seat.
+    /// Distinct from a disconnect: the game doesn't auto-skip an away player's turn on its own
+    /// (it pauses, by design), this is only populated by an explicit host Drop action.</summary>
+    public HashSet<string> DroppedPlayers { get; set; } = [];
 }

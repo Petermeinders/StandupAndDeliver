@@ -40,11 +40,12 @@ registry.Register(new GameRegistration(
     ComponentType: typeof(CursedVaultGameRoot)));
 registry.Register(new GameRegistration(
     Id: "defend-fortress",
-    Name: "Defend Thy Fortress",
-    Tagline: "Co-op prototype — test latency & combat feel",
-    ImageUrl: null,
+    Name: "Protect Thy Fortress",
+    Tagline: "Co-op wave defense — grab, fling, upgrade, repeat",
+    ImageUrl: "/ProtectThyFortressCover.webp",
     Icon: "🏰",
-    ComponentType: typeof(DefendFortressGameRoot)));
+    ComponentType: typeof(DefendFortressGameRoot),
+    IsExperimental: true));
 
 builder.Services.AddSingleton(registry);
 

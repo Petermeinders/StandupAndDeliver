@@ -12,9 +12,10 @@
 
 <ToastContainer />
 <ActivityLogDrawer @ref="_logDrawer" />
+<AddToHomeScreenModal Open="_addToPhoneOpen" OpenChanged="OnAddToPhoneOpenChanged" />
 
 @* ── Header bar ──────────────────────────────────────────────────────────── *@
-<header class="@HeaderClass" style="z-index:100">
+<header class="@HeaderClass @(_menuOpen ? "fortress-header-interactive" : "")" style="z-index:100">
     <div class="flex items-center gap-2 px-3 h-12 max-w-3xl mx-auto w-full">
 
         @* QR scan *@
@@ -93,10 +94,27 @@
                             <span class="text-[10px] bg-gray-700 text-gray-400 px-1.5 py-0.5 rounded-full tabular-nums">@Toast.Log.Count</span>
                         }
                     </button>
+                    @if (_showAddToPhone)
+                    {
+                        <button @onclick="OpenAddToPhone"
+                                class="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 transition-all text-left">
+                            📲 Add to Phone
+                        </button>
+                    }
                     @if (GameState.PlatformState is not null)
                     {
-                        <div class="border-t border-gray-700 mt-1 pt-1 px-4 py-2">
-                            <button @onclick="LeaveRoom" class="text-xs text-gray-600 hover:text-red-400 transition-all">Leave room</button>
+                        <div class="border-t border-gray-700 mt-1 pt-1 px-4 py-2 flex flex-col items-start gap-1">
+                            @if (GameState.PlatformState.Phase != GamePhase.Lobby)
+                            {
+                                <button @onclick="LeaveGame" class="text-xs text-gray-600 hover:text-amber-400 transition-all"
+                                        title="Back to the main menu — stays in the room, resume any time.">
+                                    Leave Game
+                                </button>
+                            }
+                            <button @onclick="LeaveRoom" class="text-xs text-gray-600 hover:text-red-400 transition-all"
+                                    title="Leaves the room entirely — not resumable.">
+                                Leave Room
+                            </button>
                         </div>
                     }
                 </div>
@@ -140,13 +158,33 @@
                     <div class="mt-4 space-y-1">
                         @foreach (var p in ps.Players)
                         {
+                            var canDropFromGame = ps.Phase != GamePhase.Lobby && p.Name != GameState.PlayerName
+                                && (meHost || (p.IsHost && p.AwayFromGame));
+                            var canDropFromRoom = meHost && p.Name != GameState.PlayerName && !p.IsBot;
                             <div class="flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full shrink-0 @(p.IsConnected ? "bg-green-400" : "bg-gray-600")"></span>
                                 <span class="text-sm flex-1 @(p.IsConnected ? "text-gray-200" : "text-gray-600") @(p.IsBot ? "italic" : "")">
                                     @p.Name
+                                    @if (p.AwayFromGame) { <span class="text-amber-400 text-xs">(away)</span> }
                                 </span>
                                 @if (p.IsHost) { <span class="text-yellow-400 text-xs">👑</span> }
                                 @if (p.IsBot) { <span class="text-gray-500 text-xs">🤖</span> }
+                                @if (canDropFromGame)
+                                {
+                                    <button @onclick='() => DropPlayer(p.Name, "game")'
+                                            class="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-amber-400 hover:bg-gray-700"
+                                            title="Drop from the current game — they stay in the room.">
+                                        Drop game
+                                    </button>
+                                }
+                                @if (canDropFromRoom)
+                                {
+                                    <button @onclick='() => DropPlayer(p.Name, "room")'
+                                            class="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-red-400 hover:bg-gray-700"
+                                            title="Remove them from the room entirely.">
+                                        Drop room
+                                    </button>
+                                }
                             </div>
                         }
                     </div>
@@ -394,6 +432,8 @@
     private bool _joinOpen;
     private bool _hostLeftOpen;
     private bool _gameSettingsOpen;
+    private bool _addToPhoneOpen;
+    private bool _showAddToPhone;
     private RoomInfoDto? _pendingRoom;
     private bool _pendingRoomLoading;
     private bool _pendingRoomNotFound;
@@ -430,6 +470,41 @@
         Hub.OnReconnecting += OnHubReconnecting;
         Hub.OnReconnected += OnHubReconnected;
         Hub.OnGameState += OnGameStateReceived;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await RefreshAddToPhoneVisibilityAsync();
+    }
+
+    private async Task RefreshAddToPhoneVisibilityAsync()
+    {
+        try
+        {
+            _showAddToPhone = await JS.InvokeAsync<bool>("gameInterop.shouldShowAddToPhone");
+        }
+        catch
+        {
+            _showAddToPhone = false;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OpenAddToPhone()
+    {
+        _menuOpen = false;
+        await RefreshAddToPhoneVisibilityAsync();
+        if (_showAddToPhone)
+            _addToPhoneOpen = true;
+    }
+
+    private Task OnAddToPhoneOpenChanged(bool open)
+    {
+        _addToPhoneOpen = open;
+        if (!open)
+            _ = RefreshAddToPhoneVisibilityAsync();
+        return Task.CompletedTask;
     }
 
     /// <summary>Opens the join modal with a room code pre-filled (e.g. from QR or invite URL).</summary>
@@ -512,6 +587,20 @@
         Nav.NavigateTo("/room");
     }
 
+    /// <summary>Room creation from the "Start Here" modal stays put — just dismiss the modal and let
+    /// the header badge reflect the new room code, rather than yanking the player to /room. Joining
+    /// (an existing friend's lobby) still navigates there since that's the point of joining.</summary>
+    private async Task DismissModalAfterCreateAsync(string? roomCode, string playerName)
+    {
+        GameState.PendingJoinCode = null;
+        _code = "";
+        _pendingRoom = null;
+        _joinOpen = false;
+        Toast.Success($"Created room {roomCode}!");
+        Toast.LogEvent($"Created room {roomCode} as {playerName}", "Room");
+        await JS.InvokeVoidAsync("gameInterop.playSound", "confirm");
+    }
+
     private void OnHubReconnecting()
     {
         _reconnecting = true;
@@ -570,7 +659,7 @@
             if (result.Success)
             {
                 var roomCode = result.RoomCode ?? GameState.PlatformState?.RoomCode;
-                await EnterLobbyAfterJoinAsync(roomCode, playerName, "Created");
+                await DismissModalAfterCreateAsync(roomCode, playerName);
             }
             else { Toast.Error(result.Error ?? "Failed to create room."); }
         }
@@ -681,6 +770,15 @@
         Nav.NavigateTo("/room");
     }
 
+    private async Task DropPlayer(string targetPlayerName, string scope)
+    {
+        var result = await Hub.DropPlayerAsync(targetPlayerName, scope);
+        if (result.Success)
+            Toast.LogEvent($"{targetPlayerName} dropped from the {(scope == "room" ? "room" : "game")}", "Room", ToastLevel.Warning);
+        else
+            Toast.Error(result.Error ?? "Could not drop player.");
+    }
+
     private async Task TakeOverAsHost()
     {
         _promotingHost = true;
@@ -693,6 +791,21 @@
             Toast.Error(result.Error ?? "Could not take over as host.");
     }
 
+    /// <summary>"Leave Game" — back to the main menu, but stays a room member (SignalR group
+    /// membership untouched, saved session kept) so "Resume Last Session" brings them right back.</summary>
+    private async Task LeaveGame()
+    {
+        _menuOpen = false;
+        var code = GameState.PlatformState?.RoomCode;
+        await Hub.LeaveGameAsync();
+        if (code is not null)
+            Toast.LogEvent($"Left the game in room {code} — resume any time", "Room");
+        Nav.NavigateTo("/");
+    }
+
+    /// <summary>"Leave Room" — full exit. Removes the player from the room outright (server purges
+    /// the room immediately if that was the last human) and forgets the saved room so no "Resume"
+    /// option is offered.</summary>
     private async Task LeaveRoom()
     {
         _menuOpen = false;
@@ -700,7 +813,7 @@
         if (code is not null)
         {
             Toast.LogEvent($"Left room {code}", "Room", ToastLevel.Warning);
-            await Hub.LeaveRoomGroupAsync(code);
+            await Hub.LeaveRoomPermanentlyAsync(code);
         }
         await SavedSession.ClearAsync();
         GameState.Clear();

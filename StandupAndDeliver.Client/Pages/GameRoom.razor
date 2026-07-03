@@ -12,9 +12,13 @@
 
 <PageTitle>Fireside Arcade</PageTitle>
 
-<div class="landing-bg" style="@_bgStyle"></div>
+@if (!IsFortressImmersiveCombat)
+{
+    <div class="landing-bg" style="@_bgStyle"></div>
+}
 
-<AppHeader @ref="_header" OnSettingsOpen="OpenSettings" />
+<div class="@(IsFortressImmersiveCombat ? "fortress-immersive-room" : null)">
+<AppHeader OnSettingsOpen="OpenSettings" />
 <SettingsModal @ref="_settingsModal" />
 
 @if (_reconnecting)
@@ -24,7 +28,7 @@
     </div>
 }
 
-<div class="@(Settings.StickyHeader ? "pt-12" : "") relative z-10">
+<div class="@RoomContentClass relative z-10">
 @if (_connecting)
 {
     <div class="min-h-screen text-white flex items-center justify-center">
@@ -76,7 +80,7 @@ else if (GameState.PlatformState is { } platform)
     var gameCompType = Registry.GetComponent(platform.GameType);
     @if (gameCompType is not null)
     {
-        <div @key="@platform.GameType" class="screen-fade">
+        <div @key="@platform.GameType" class="@(IsFortressImmersiveCombat ? "fortress-game-host" : "screen-fade")">
             <DynamicComponent Type="gameCompType" Parameters="_gameParams" />
         </div>
     }
@@ -98,13 +102,13 @@ else
     </div>
 }
 </div>
+</div>
 
 @code {
     [Parameter, SupplyParameterFromQuery] public string? Action { get; set; }
     [Parameter, SupplyParameterFromQuery] public string? Code { get; set; }
     [Parameter, SupplyParameterFromQuery] public string? Game { get; set; }
 
-    private AppHeader? _header;
     private SettingsModal? _settingsModal;
     private VisibilityInterop? _visibilityInterop;
     private bool _connecting = true;
@@ -122,6 +126,23 @@ else
         GameState.PlatformState?.Phase == GamePhase.Lobby
             ? Registry.GetBackgroundStyle(GameState.PlatformState.GameType)
             : Registry.GetBackgroundStyle(null);
+
+    private bool IsFortressImmersiveCombat =>
+        GameState.PlatformState?.GameType == "defend-fortress"
+        && GameState.GetState<DefendFortressGameStateDto>("defend-fortress")?.Phase == "WavePlaying";
+
+    private string RoomContentClass
+    {
+        get
+        {
+            var classes = new List<string>();
+            if (IsFortressImmersiveCombat)
+                classes.Add("fortress-immersive-content");
+            else if (Settings.StickyHeader)
+                classes.Add("pt-12");
+            return string.Join(' ', classes);
+        }
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

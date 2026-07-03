@@ -95,11 +95,27 @@ public sealed class HubService : IAsyncDisposable
     public async Task<HubResult> PromoteToHostAsync()
         => await Invoke("PromoteToHost");
 
+    public async Task<HubResult> SetPreferredRoleAsync(string? role)
+        => await Invoke("SetPreferredRole", role);
+
     public async Task LeaveRoomGroupAsync(string roomCode)
     {
         if (_hub is { State: HubConnectionState.Connected })
             await _hub.InvokeAsync("LeaveRoomGroup", roomCode);
     }
+
+    /// <summary>"Leave Game" — stays connected/grouped, just marks the player away. Resumable.</summary>
+    public async Task<HubResult> LeaveGameAsync()
+        => await Invoke("LeaveGame");
+
+    /// <summary>"Leave Room" — full, deliberate exit. Not resumable.</summary>
+    public async Task<HubResult> LeaveRoomPermanentlyAsync(string roomCode)
+        => await Invoke("LeaveRoomPermanently", roomCode);
+
+    /// <summary>Host authority: force another player out of the active game ("game") or the room
+    /// outright ("room"). See GameHub.DropPlayer for the authorization rules.</summary>
+    public async Task<HubResult> DropPlayerAsync(string targetPlayerName, string scope)
+        => await Invoke("DropPlayer", targetPlayerName, scope);
 
     private async Task<HubResult> Invoke(string method, params object?[] args)
     {

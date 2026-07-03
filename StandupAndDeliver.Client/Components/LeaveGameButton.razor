@@ -1,8 +1,10 @@
 @inject NavigationManager Nav
 @inject GameStateService GameState
 @inject HubService Hub
-@inject SavedSessionService SavedSession
 
+@* "Leave Game" — the player stays a member of the room/SignalR group and keeps their saved
+   session, so the home screen's "Resume Last Session" card can bring them straight back. This is
+   deliberately NOT a full room exit — that's the hamburger menu's "Leave Room" action. *@
 <div class="mt-6 text-center">
     <button @onclick="OnLeave"
             class="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:text-gray-400 transition-all">
@@ -13,10 +15,7 @@
 @code {
     private async Task OnLeave()
     {
-        if (GameState.PlatformState?.RoomCode is { } code)
-            await Hub.LeaveRoomGroupAsync(code);
-        await SavedSession.ClearAsync();
-        GameState.Clear();
+        await Hub.LeaveGameAsync();
         Nav.NavigateTo("/");
     }
 }

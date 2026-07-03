@@ -1,8 +1,363 @@
 // Shared-enemy sync prototype — server authoritative positions, 20 Hz snapshots.
 const FORTRESS_GRAB_RADIUS = 48;
 
+// PTF-1.8/3.7 bug fix: CSS alone (`hover: none`/`pointer: coarse`) can't reliably tell a phone
+// apart from a touchscreen laptop — many Windows hybrid devices report coarse/no-hover even with
+// a mouse attached and no touch happening, which was showing the "rotate your device" overlay on
+// desktop. Epic §15's own spec calls for a UA hint alongside the pointer check, so we do that in
+// JS and toggle a class on <html> that the CSS gates on instead of the raw media features.
+(function detectMobileForFortressOrientationGate() {
+    const mobileUaPattern = /Android|iPhone|iPad|iPod|Mobi/i;
+    const isTouchCapable = matchMedia('(hover: none) and (pointer: coarse)').matches;
+
+    const apply = () => {
+        const isMobile = mobileUaPattern.test(navigator.userAgent) && isTouchCapable;
+        document.documentElement.classList.toggle('fortress-is-mobile', isMobile);
+    };
+
+    apply();
+    window.addEventListener('resize', apply);
+})();
+
+// PTF sprite assets — real skeleton art supplied 2026-07-01, replacing the stick-figure placeholder.
+//
+// `ctx.drawImage(gifImg, ...)` on a canvas always paints the GIF's *current displayed frame* — but an
+// off-screen/near-invisible `<img>` (tiny, -9999px, opacity 0.01) turned out to still get treated as
+// "not actually visible" by Chromium and gets its GIF animation paused entirely, so every enemy froze
+// on frame 1. There's no reliable "please keep animating this off-screen" DOM trick, so instead we
+// decode the GIF's frames ourselves and drive the frame timing in the render loop — the canvas draw
+// no longer depends on the browser's own GIF playback at all.
+//
+// This first shipped using the `ImageDecoder` API, which fixed it on desktop Chrome/Edge — but Edge
+// on mobile (iOS) runs on Apple's WebKit engine (Apple's App Store rules force every iOS browser onto
+// WebKit, regardless of brand), and WebKit doesn't implement `ImageDecoder` at all, so mobile Edge
+// silently fell back to a static single frame. Rather than depend on any browser-specific decode API,
+// `decodeGifFrames` below parses the GIF89a format by hand (LZW decompression + per-frame disposal-
+// method compositing), so animation works identically everywhere.
+const FORTRESS_SPRITES = {
+    walk: 'fortress/skeleton-walk.gif',
+    attack: 'fortress/skeleton-attack.gif',
+    sway: 'fortress/skeleton-sway.gif',
+};
+
+// { frames: [{ bitmap, durationMs }], totalDurationMs } once decoded, or a plain <img> as a
+// single-frame fallback (still loading / decode failure).
+const fortressSpriteImages = {};
+for (const key of Object.keys(FORTRESS_SPRITES)) {
+    fortressSpriteImages[key] = new Image();
+}
+
+async function loadFortressSprite(key, src) {
+    try {
+        const buf = await (await fetch(src)).arrayBuffer();
+        const frames = decodeGifFrames(buf);
+        fortressSpriteImages[key] = {
+            frames,
+            totalDurationMs: frames.reduce((sum, f) => sum + f.durationMs, 0),
+        };
+    } catch (_) {
+        fortressSpriteImages[key].src = src; // static-frame fallback
+    }
+}
+
+for (const [key, src] of Object.entries(FORTRESS_SPRITES)) {
+    loadFortressSprite(key, src);
+}
+
+// ── Minimal GIF89a decoder: LZW decompression + disposal-method frame compositing ──
+// Returns [{ bitmap: <canvas>, durationMs }]. `bitmap` is a fully-composited, standalone canvas
+// per frame (not just the frame's own sub-rectangle), ready to hand straight to `drawImage`.
+function decodeGifFrames(buf) {
+    const data = new Uint8Array(buf);
+    let p = 6; // skip "GIF87a"/"GIF89a" signature
+    const readByte = () => data[p++];
+    const readShort = () => { const v = data[p] | (data[p + 1] << 8); p += 2; return v; };
+    const readColorTable = (size) => { const t = data.slice(p, p + size * 3); p += size * 3; return t; };
+    const skipSubBlocks = () => { while (true) { const n = readByte(); if (!n) break; p += n; } };
+
+    const width = readShort();
+    const height = readShort();
+    const packed = readByte();
+    const gct = (packed & 0x80) ? readColorTable(2 << (packed & 0x07)) : null;
+    p += 2; // background color index, pixel aspect ratio
+
+    const composite = document.createElement('canvas');
+    composite.width = width;
+    composite.height = height;
+    const cctx = composite.getContext('2d');
+
+    const frames = [];
+    let gce = null; // pending graphic control extension for the next image block
+    let savedForRestore = null;
+    let prevDisposal = 0;
+    let prevRect = null;
+
+    while (p < data.length) {
+        const blockType = readByte();
+        if (blockType === 0x21) {
+            const label = readByte();
+            if (label === 0xF9) {
+                readByte(); // block size (4)
+                const flags = readByte();
+                const delay = readShort();
+                const transparentIndex = readByte();
+                readByte(); // terminator
+                gce = {
+                    disposal: (flags >> 2) & 0x07,
+                    transparentIndex: (flags & 0x01) ? transparentIndex : null,
+                    delayMs: delay * 10,
+                };
+            } else {
+                skipSubBlocks();
+            }
+        } else if (blockType === 0x2C) {
+            const left = readShort(), top = readShort(), w = readShort(), h = readShort();
+            const packedImg = readByte();
+            const interlace = (packedImg & 0x40) !== 0;
+            const colorTable = (packedImg & 0x80) ? readColorTable(2 << (packedImg & 0x07)) : gct;
+
+            const minCodeSize = readByte();
+            const subBlocks = [];
+            while (true) {
+                const n = readByte();
+                if (!n) break;
+                subBlocks.push(data.slice(p, p + n));
+                p += n;
+            }
+            const compressed = new Uint8Array(subBlocks.reduce((s, b) => s + b.length, 0));
+            let off = 0;
+            for (const b of subBlocks) { compressed.set(b, off); off += b.length; }
+            const indices = lzwDecodeGif(compressed, minCodeSize, w * h);
+
+            if (prevDisposal === 2 && prevRect) {
+                cctx.clearRect(prevRect.left, prevRect.top, prevRect.w, prevRect.h);
+            } else if (prevDisposal === 3 && savedForRestore) {
+                cctx.putImageData(savedForRestore, 0, 0);
+            }
+
+            const disposal = gce?.disposal ?? 0;
+            if (disposal === 3) savedForRestore = cctx.getImageData(0, 0, width, height);
+
+            const imgData = indicesToImageData(indices, w, h, colorTable, gce?.transparentIndex ?? null, interlace);
+            const temp = document.createElement('canvas');
+            temp.width = w;
+            temp.height = h;
+            temp.getContext('2d').putImageData(imgData, 0, 0);
+            cctx.drawImage(temp, left, top);
+
+            const frameCanvas = document.createElement('canvas');
+            frameCanvas.width = width;
+            frameCanvas.height = height;
+            frameCanvas.getContext('2d').drawImage(composite, 0, 0);
+            frames.push({ bitmap: frameCanvas, durationMs: gce && gce.delayMs > 0 ? gce.delayMs : 100 });
+
+            prevDisposal = disposal;
+            prevRect = { left, top, w, h };
+            gce = null;
+        } else if (blockType === 0x3B || Number.isNaN(blockType)) {
+            break; // trailer / end of data
+        } else {
+            break; // unknown block — stop rather than risk mis-parsing the rest
+        }
+    }
+
+    return frames.length > 0 ? frames : [{ bitmap: composite, durationMs: 100 }];
+}
+
+function lzwDecodeGif(data, minCodeSize, pixelCount) {
+    const clearCode = 1 << minCodeSize;
+    const eoiCode = clearCode + 1;
+    let codeSize, dict;
+    const resetDict = () => {
+        dict = [];
+        for (let i = 0; i < clearCode; i++) dict[i] = [i];
+        dict[clearCode] = [];
+        dict[eoiCode] = [];
+        codeSize = minCodeSize + 1;
+    };
+    resetDict();
+
+    const output = new Uint8Array(pixelCount);
+    let outPos = 0;
+    let bitBuffer = 0, bitCount = 0, bytePos = 0, prev = null;
+
+    const readCode = () => {
+        while (bitCount < codeSize) {
+            if (bytePos >= data.length) return eoiCode;
+            bitBuffer |= data[bytePos++] << bitCount;
+            bitCount += 8;
+        }
+        const code = bitBuffer & ((1 << codeSize) - 1);
+        bitBuffer >>= codeSize;
+        bitCount -= codeSize;
+        return code;
+    };
+
+    while (outPos < pixelCount) {
+        const code = readCode();
+        if (code === clearCode) { resetDict(); prev = null; continue; }
+        if (code === eoiCode) break;
+
+        let entry;
+        if (code < dict.length && dict[code]) entry = dict[code];
+        else if (code === dict.length && prev) entry = prev.concat([prev[0]]);
+        else break;
+
+        for (let i = 0; i < entry.length && outPos < pixelCount; i++) output[outPos++] = entry[i];
+
+        if (prev) {
+            dict.push(prev.concat([entry[0]]));
+            if (dict.length >= (1 << codeSize) && codeSize < 12) codeSize++;
+        }
+        prev = entry;
+    }
+    return output;
+}
+
+function indicesToImageData(indices, w, h, colorTable, transparentIndex, interlace) {
+    const imgData = new ImageData(w, h);
+    const px = imgData.data;
+    const rowOrder = interlace ? interlacedRowOrder(h) : null;
+    for (let row = 0; row < h; row++) {
+        const destRow = interlace ? rowOrder[row] : row;
+        for (let col = 0; col < w; col++) {
+            const idx = indices[row * w + col];
+            const destPos = (destRow * w + col) * 4;
+            if (idx === transparentIndex || !colorTable) {
+                px[destPos + 3] = 0;
+            } else {
+                px[destPos] = colorTable[idx * 3];
+                px[destPos + 1] = colorTable[idx * 3 + 1];
+                px[destPos + 2] = colorTable[idx * 3 + 2];
+                px[destPos + 3] = 255;
+            }
+        }
+    }
+    return imgData;
+}
+
+function interlacedRowOrder(h) {
+    const order = [];
+    for (let y = 0; y < h; y += 8) order.push(y);
+    for (let y = 4; y < h; y += 8) order.push(y);
+    for (let y = 2; y < h; y += 4) order.push(y);
+    for (let y = 1; y < h; y += 2) order.push(y);
+    return order;
+}
+
+// Real landscape backdrop supplied 2026-07-02, replacing the flat gradient placeholder.
+const fortressLandscapeBg = new Image();
+fortressLandscapeBg.src = 'fortress/landscape-bg.jpg';
+
+function currentFortressSpriteFrame(sprite, nowMs) {
+    if (!sprite) return null;
+    if (sprite instanceof HTMLImageElement) {
+        return sprite.complete && sprite.naturalWidth > 0 ? sprite : null;
+    }
+    if (!sprite.frames || sprite.frames.length === 0 || sprite.totalDurationMs <= 0) return null;
+    let t = nowMs % sprite.totalDurationMs;
+    for (const frame of sprite.frames) {
+        if (t < frame.durationMs) return frame.bitmap;
+        t -= frame.durationMs;
+    }
+    return sprite.frames[sprite.frames.length - 1].bitmap;
+}
+
 window.fortressInterop = {
     _games: {},
+
+    _isMobile() {
+        return document.documentElement.classList.contains('fortress-is-mobile');
+    },
+
+    _isLandscape() {
+        return window.matchMedia('(orientation: landscape)').matches;
+    },
+
+    async _tryLockLandscape() {
+        try {
+            await screen.orientation?.lock?.('landscape');
+        } catch (_) { /* iOS Safari tab — overlay handles it */ }
+    },
+
+    _unlockOrientation() {
+        try {
+            screen.orientation?.unlock?.();
+        } catch (_) {}
+    },
+
+    _getCombatShell(canvas) {
+        return document.getElementById('fortress-combat-shell')
+            || canvas?.closest('.fortress-combat-shell');
+    },
+
+    enterCombatFullscreen(canvasId) {
+        const game = this._games[canvasId];
+        if (!game || game._combatFullscreen) return;
+
+        const shell = this._getCombatShell(game.canvas);
+        if (!shell) return;
+
+        game._combatShell = shell;
+        game._combatFullscreen = true;
+        shell.classList.add('fortress-combat-fullscreen');
+        document.documentElement.classList.add('fortress-combat-active');
+
+        const onLayoutChange = () => {
+            game.resize?.();
+            // Exit native FS if something re-entered it — only the combat shell may be fullscreen,
+            // which hides AppHeader (a sibling outside the shell). CSS .fortress-combat-fullscreen
+            // handles layout; native FS is intentionally not used on mobile anymore.
+            const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+            if (fsEl && (fsEl === shell || shell.contains(fsEl))) {
+                const exit = document.exitFullscreen
+                    || document.webkitExitFullscreen
+                    || document.msExitFullscreen;
+                if (exit) Promise.resolve(exit.call(document)).catch(() => {});
+            }
+            if (this._isMobile() && this._isLandscape()) {
+                this._tryLockLandscape();
+            }
+        };
+        game._layoutHandler = onLayoutChange;
+        window.addEventListener('resize', onLayoutChange);
+        window.addEventListener('orientationchange', onLayoutChange);
+        document.addEventListener('fullscreenchange', onLayoutChange);
+
+        if (this._isMobile() && this._isLandscape()) {
+            this._tryLockLandscape();
+        }
+
+        requestAnimationFrame(onLayoutChange);
+    },
+
+    exitCombatFullscreen(canvasId) {
+        const game = this._games[canvasId];
+        if (!game || !game._combatFullscreen) return;
+
+        if (game._layoutHandler) {
+            window.removeEventListener('resize', game._layoutHandler);
+            window.removeEventListener('orientationchange', game._layoutHandler);
+            document.removeEventListener('fullscreenchange', game._layoutHandler);
+            game._layoutHandler = null;
+        }
+
+        if (game._combatShell) {
+            game._combatShell.classList.remove('fortress-combat-fullscreen');
+        }
+        document.documentElement.classList.remove('fortress-combat-active');
+        game._combatFullscreen = false;
+        game._combatShell = null;
+
+        this._unlockOrientation();
+
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+            const exit = document.exitFullscreen
+                || document.webkitExitFullscreen
+                || document.msExitFullscreen;
+            if (exit) Promise.resolve(exit.call(document)).catch(() => {});
+        }
+    },
 
     start(canvasId, dotNetRef, playerName) {
         this.stop(canvasId);
@@ -75,7 +430,7 @@ window.fortressInterop = {
             let best = null;
             let bestDist = FORTRESS_GRAB_RADIUS;
             for (const enemy of game.serverEnemies) {
-                if (enemy.state !== 'march') continue;
+                if (enemy.state !== 'march' && enemy.state !== 'attacking') continue;
                 const p = toCanvas(enemy.x, enemy.y);
                 const d = Math.hypot(p.x - cx, p.y - cy);
                 if (d < bestDist) {
@@ -138,6 +493,7 @@ window.fortressInterop = {
         };
 
         const onPointerDown = (e) => {
+            if (game.paused) return;
             if (game.localHeldId !== null || game.pendingGrabId !== null) return;
             const { x, y } = canvasPos(e);
             const target = findGrabTarget(x, y);
@@ -275,6 +631,7 @@ window.fortressInterop = {
 
         this._games[canvasId] = game;
         game.rafId = requestAnimationFrame(game.loop);
+        this.enterCombatFullscreen(canvasId);
         return true;
     },
 
@@ -297,7 +654,17 @@ window.fortressInterop = {
         }
     },
 
+    setPaused(canvasId, paused) {
+        const game = this._games[canvasId];
+        if (!game) return;
+        game.paused = !!paused;
+        if (game.canvas) {
+            game.canvas.style.pointerEvents = paused ? 'none' : 'auto';
+        }
+    },
+
     stop(canvasId) {
+        this.exitCombatFullscreen(canvasId);
         const game = this._games[canvasId];
         if (!game) return;
         game.running = false;
@@ -309,6 +676,20 @@ window.fortressInterop = {
             }
         }
         delete this._games[canvasId];
+    },
+
+    /// PTF-2.1: client-side save export — server state is already synced to this client,
+    /// so exporting just serializes it to a file rather than round-tripping to the server.
+    downloadJson(filename, jsonContent) {
+        const blob = new Blob([jsonContent], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 };
 
@@ -354,16 +735,7 @@ function drawFrame(game, castleX, groundY) {
         y: (wy / game.worldH) * h,
     });
 
-    ctx.fillStyle = '#1a1410';
-    ctx.fillRect(0, 0, w, h);
-
-    ctx.fillStyle = '#3d2f1f';
-    ctx.fillRect(0, groundY, w, h - groundY);
-    ctx.strokeStyle = '#5c4a32';
-    ctx.beginPath();
-    ctx.moveTo(0, groundY);
-    ctx.lineTo(w, groundY);
-    ctx.stroke();
+    drawSkyAndGround(ctx, w, h, groundY);
 
     drawCastle(ctx, castleX, groundY);
 
@@ -384,6 +756,48 @@ function drawFrame(game, castleX, groundY) {
     ctx.fillText(modeLabel, 12, 20);
 }
 
+/** Landscape backdrop — draws the real cartoon sky/hills/grass art (cover-fit, cropped to the
+ *  canvas aspect ratio) once loaded; falls back to the old gradient placeholder until then. */
+function drawSkyAndGround(ctx, w, h, groundY) {
+    if (fortressLandscapeBg.complete && fortressLandscapeBg.naturalWidth > 0) {
+        drawCoverFit(ctx, fortressLandscapeBg, w, h);
+        return;
+    }
+
+    const sky = ctx.createLinearGradient(0, 0, 0, groundY);
+    sky.addColorStop(0, '#5fa8e0');
+    sky.addColorStop(1, '#bfe4f5');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, w, groundY);
+
+    const blendHeight = Math.max(6, groundY * 0.03);
+    const ground = ctx.createLinearGradient(0, groundY - blendHeight, 0, h);
+    ground.addColorStop(0, '#bfe4f5'); // matches sky horizon color for a soft blend
+    ground.addColorStop(0.35, '#6fbf4f');
+    ground.addColorStop(1, '#4a9c3a');
+    ctx.fillStyle = ground;
+    ctx.fillRect(0, groundY - blendHeight, w, h - groundY + blendHeight);
+}
+
+/** Draws `img` scaled+cropped to fill the target w×h exactly (CSS `background-size: cover` semantics). */
+function drawCoverFit(ctx, img, w, h) {
+    const srcRatio = img.naturalWidth / img.naturalHeight;
+    const dstRatio = w / h;
+    let sx, sy, sw, sh;
+    if (srcRatio > dstRatio) {
+        sh = img.naturalHeight;
+        sw = sh * dstRatio;
+        sx = (img.naturalWidth - sw) / 2;
+        sy = 0;
+    } else {
+        sw = img.naturalWidth;
+        sh = sw / dstRatio;
+        sx = 0;
+        sy = (img.naturalHeight - sh) / 2;
+    }
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
+}
+
 function drawCastle(ctx, x, groundY) {
     ctx.fillStyle = '#6b7280';
     ctx.fillRect(x, groundY - 90, 36, 90);
@@ -397,6 +811,14 @@ function drawCastle(ctx, x, groundY) {
 }
 
 function drawStickEnemy(ctx, x, y, state, rotation, isHeld, isOtherHeld) {
+    const spriteKey = state === 'march' ? 'walk' : state === 'attacking' ? 'attack' : 'sway';
+    const frame = currentFortressSpriteFrame(fortressSpriteImages[spriteKey], performance.now());
+
+    if (frame) {
+        drawSpriteEnemy(ctx, frame, x, y, state, rotation, isHeld, isOtherHeld);
+        return;
+    }
+
     ctx.save();
     ctx.translate(x, y);
     if (state === 'airborne') ctx.rotate(rotation);
@@ -444,6 +866,37 @@ function drawStickEnemy(ctx, x, y, state, rotation, isHeld, isOtherHeld) {
         ctx.lineTo(10, 16);
     }
     ctx.stroke();
+
+    ctx.restore();
+}
+
+/** Draws the real skeleton GIF sprites in place of the stick figure. `walk` faces right in the
+ *  source art, matching march direction (spawn at x=-20, castle on the right) — no mirroring
+ *  needed. `sway` is a front-facing pose used for both held (player drag) and airborne (flung/
+ *  artillery-target) states; a held/other-held tint still applies as a translucent color wash so
+ *  players can tell "mine" from "someone else's" at a glance. */
+function drawSpriteEnemy(ctx, sprite, x, y, state, rotation, isHeld, isOtherHeld) {
+    // `sprite` is either an ImageBitmap (decoded GIF frame — has width/height) or an HTMLImageElement
+    // fallback (has naturalWidth/naturalHeight instead).
+    const srcH = sprite.naturalHeight ?? sprite.height;
+    const srcW = sprite.naturalWidth ?? sprite.width;
+    const targetH = 44;
+    const scale = targetH / srcH;
+    const w = srcW * scale;
+    const h = targetH;
+
+    ctx.save();
+    ctx.translate(x, y);
+    if (state === 'airborne') ctx.rotate(rotation);
+
+    ctx.drawImage(sprite, -w / 2, -h + 4, w, h);
+
+    if (isHeld || isOtherHeld) {
+        ctx.globalAlpha = 0.35;
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = isHeld ? '#fde68a' : '#a78bfa';
+        ctx.fillRect(-w / 2, -h + 4, w, h);
+    }
 
     ctx.restore();
 }

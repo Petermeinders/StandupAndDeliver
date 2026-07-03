@@ -5,5 +5,7 @@ public record PlayerDto(
     int Score,
     bool IsHost,
     bool IsConnected,
-    bool IsBot = false
+    bool IsBot = false,
+    string? PreferredRole = null,
+    bool AwayFromGame = false
 );

@@ -71,6 +71,16 @@ public class CursedVaultGame(IHubContext<GameHub, IGameClient> hubContext, GameR
         await BroadcastState(room, state);
     }
 
+    /// <summary>Host-triggered Drop reuses the same elimination path as a grace-period timeout —
+    /// zero their hand, mark eliminated, check for a single-winner finish.</summary>
+    public async Task OnPlayerDropped(GameRoom room, string playerName)
+    {
+        if (!_states.TryGetValue(room.RoomCode, out var state)) return;
+        EliminatePlayer(state, playerName);
+        if (CheckSingleWinner(state, room)) { }
+        await BroadcastState(room, state);
+    }
+
     // ── Actions ───────────────────────────────────────────────────────────────
 
     private async Task<HubResult> PlayCard(GameRoom room, CursedVaultGameState state, string connectionId, string? payloadJson)

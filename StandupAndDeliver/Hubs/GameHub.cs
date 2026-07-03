@@ -43,6 +43,9 @@ public class GameHub(
         var action = created ? "RoomCreated" : "PlayerJoined";
         _ = eventLog.LogAsync(action, gameType, roomCode, safeName, room.Players.Count);
 
+        if (!created && room.Phase != GamePhase.Lobby)
+            await GetGame(room.GameType).OnPlayerJoined(room, Context.ConnectionId);
+
         // Cancel any pending empty-room timer since a player just joined
         gameRoomService.CancelEmptyRoomTimer(roomCode);
 
@@ -77,6 +80,10 @@ public class GameHub(
         await Groups.AddToGroupAsync(Context.ConnectionId, room!.RoomCode);
         await Clients.Group(room.RoomCode).ReceiveGameState(BuildLeanDto(room));
         _ = eventLog.LogAsync("PlayerJoined", room.GameType, room.RoomCode, safeName, room.Players.Count);
+
+        if (room.Phase != GamePhase.Lobby)
+            await GetGame(room.GameType).OnPlayerJoined(room, Context.ConnectionId);
+
         return new HubResult(true);
     }
 
@@ -91,6 +98,7 @@ public class GameHub(
 
         player.ConnectionId = Context.ConnectionId;
         player.IsConnected = true;
+        player.AwayFromGame = false;
         room.LastActivity = DateTime.UtcNow;
         gameRoomService.CancelGracePeriod(roomCode, player.Name);
 
@@ -148,6 +156,28 @@ public class GameHub(
         return await game.HandleAction(action, payloadJson, room, Context.ConnectionId);
     }
 
+    /// <summary>Lobby-time seat pre-pick (e.g. defend-fortress's Artillery role, epic §14/Q18).
+    /// Only meaningful before the game starts — games read <see cref="Player.PreferredRole"/> in
+    /// their own StartGame implementation if they care about it; other games just ignore it.</summary>
+    public async Task<HubResult> SetPreferredRole(string? role)
+    {
+        var room = GetRoomForCaller();
+        if (room is null) return new HubResult(false, "Room not found.");
+        if (room.Phase != GamePhase.Lobby) return new HubResult(false, "Game already started.");
+
+        var player = room.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId && !p.IsBot);
+        if (player is null) return new HubResult(false, "Player not found.");
+
+        var normalizedRole = string.IsNullOrWhiteSpace(role) ? null : role;
+        if (normalizedRole is not null
+            && room.Players.Any(p => p != player && !p.IsBot && p.PreferredRole == normalizedRole))
+            return new HubResult(false, "Someone else already holds that seat.");
+
+        player.PreferredRole = normalizedRole;
+        await Clients.Group(room.RoomCode).ReceiveGameState(BuildLeanDto(room));
+        return new HubResult(true);
+    }
+
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         foreach (var room in gameRoomService.GetAllRooms())
@@ -202,6 +232,95 @@ public class GameHub(
         }
     }
 
+    /// <summary>"Leave Game" — the player stays a room member and stays connected/grouped (so they
+    /// keep getting live state and can resume instantly); every game's active-roster/turn logic
+    /// treats them like a spectator until they come back. Distinct from <see cref="LeaveRoomGroup"/>
+    /// (internal cleanup before switching rooms/games) and from <see cref="LeaveRoomPermanently"/>
+    /// (the real "Leave Room" action).</summary>
+    public async Task<HubResult> LeaveGame()
+    {
+        var room = GetRoomForCaller();
+        if (room is null) return new HubResult(false, "Room not found.");
+
+        var player = room.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
+        if (player is null) return new HubResult(false, "Player not found.");
+
+        player.AwayFromGame = true;
+        room.LastActivity = DateTime.UtcNow;
+        await Clients.Group(room.RoomCode).ReceiveGameState(BuildLeanDto(room));
+        await GetGame(room.GameType).OnPlayerLeftGame(room, Context.ConnectionId);
+        return new HubResult(true);
+    }
+
+    /// <summary>"Leave Room" — full, deliberate exit. Removes the player from the room outright
+    /// (not just marked disconnected, so there's no reconnect grace period to wait out) and purges
+    /// the room immediately if that was the last human, instead of waiting for the 5-minute
+    /// empty-room timer.</summary>
+    public async Task<HubResult> LeaveRoomPermanently(string roomCode)
+    {
+        var upper = roomCode.ToUpperInvariant();
+        var room = gameRoomService.GetRoom(upper);
+        if (room is null) return new HubResult(true);
+
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, upper);
+        var playerName = room.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId)?.Name;
+        gameRoomService.RemovePlayerByConnectionId(upper, Context.ConnectionId);
+
+        var remaining = gameRoomService.GetRoom(upper);
+        if (remaining is not null)
+        {
+            await Clients.Group(upper).ReceiveGameState(BuildLeanDto(remaining));
+            _ = eventLog.LogAsync("PlayerLeftRoom", remaining.GameType, upper, playerName ?? "", remaining.Players.Count);
+        }
+
+        return new HubResult(true);
+    }
+
+    /// <summary>Host authority: forcibly remove another player from the active game (they stay a
+    /// room member, folded into whatever spectator/elimination handling that game already has) or
+    /// from the room outright. Anyone may drop the host, but only if the host is themselves
+    /// <see cref="Player.AwayFromGame"/> and the scope is "game" — that's the "if the host leaves the
+    /// game, anyone can drop them from the game" carve-out; a host who's just left the room already
+    /// triggers auto-promotion via <see cref="LeaveRoomPermanently"/>, so there's nothing to drop.</summary>
+    public async Task<HubResult> DropPlayer(string targetPlayerName, string scope)
+    {
+        var room = GetRoomForCaller();
+        if (room is null) return new HubResult(false, "Room not found.");
+
+        var caller = room.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
+        if (caller is null) return new HubResult(false, "Player not found.");
+
+        var target = room.Players.FirstOrDefault(p => p.Name == targetPlayerName);
+        if (target is null) return new HubResult(false, "That player isn't in this room.");
+        if (target == caller) return new HubResult(false, "You can't drop yourself.");
+
+        var allowed = caller.IsHost || (scope == "game" && target.IsHost && target.AwayFromGame);
+        if (!allowed) return new HubResult(false, "Only the host can drop players.");
+
+        if (scope == "room")
+        {
+            if (target.IsConnected && !string.IsNullOrEmpty(target.ConnectionId))
+                await Groups.RemoveFromGroupAsync(target.ConnectionId, room.RoomCode);
+
+            var game = GetGame(room.GameType);
+            if (room.Phase == GamePhase.Playing) await game.OnPlayerDropped(room, target.Name);
+
+            gameRoomService.RemovePlayer(room, target);
+
+            var remaining = gameRoomService.GetRoom(room.RoomCode);
+            if (remaining is not null)
+                await Clients.Group(room.RoomCode).ReceiveGameState(BuildLeanDto(remaining));
+            _ = eventLog.LogAsync("PlayerDropped", room.GameType, room.RoomCode, target.Name, remaining?.Players.Count ?? 0);
+            return new HubResult(true);
+        }
+
+        target.AwayFromGame = true;
+        await Clients.Group(room.RoomCode).ReceiveGameState(BuildLeanDto(room));
+        await GetGame(room.GameType).OnPlayerDropped(room, target.Name);
+        _ = eventLog.LogAsync("PlayerDropped", room.GameType, room.RoomCode, target.Name, room.Players.Count);
+        return new HubResult(true);
+    }
+
     public async Task<HubResult> PromoteToHost()
     {
         var room = GetRoomForCaller();
@@ -231,6 +350,6 @@ public class GameHub(
 
     public static GameStateDto BuildLeanDto(GameRoom room) =>
         new(room.Phase, room.RoomCode,
-            room.Players.Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected, p.IsBot)).ToList(),
+            room.Players.Select(p => new PlayerDto(p.Name, p.Score, p.IsHost, p.IsConnected, p.IsBot, p.PreferredRole, p.AwayFromGame)).ToList(),
             room.GameType);
 }

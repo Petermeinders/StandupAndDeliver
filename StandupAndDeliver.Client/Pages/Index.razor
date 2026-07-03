@@ -148,6 +148,7 @@
     private List<GamePickerCarousel.GameOption> BuildGameOptions()
     {
         var options = Registry.Games
+            .Where(g => !g.IsExperimental || Settings.ExperimentalGamesEnabled)
             .Select(g => new GamePickerCarousel.GameOption(g.Id, g.Icon, g.Name, g.Tagline, g.ImageUrl))
             .ToList();
         options.Add(new("coming", "✨", "More Soon", "Stay tuned", ComingSoon: true));
@@ -190,6 +191,16 @@
     {
         _gameOptions = BuildGameOptions();
         Hub.OnGameState += OnGameState;
+        Settings.OnChange += OnSettingsChanged;
+    }
+
+    /// <summary>Experimental-games visibility depends on a per-name setting that isn't known until
+    /// `Settings.InitializeAsync()` finishes (after the first render) — rebuild the picker options
+    /// once it loads, and again any time the toggle changes live in the Settings modal.</summary>
+    private void OnSettingsChanged()
+    {
+        _gameOptions = BuildGameOptions();
+        InvokeAsync(StateHasChanged);
     }
 
     protected override void OnParametersSet()
@@ -212,19 +223,30 @@
             _themeInitialized = true;
             await Theme.InitializeAsync();
             await Settings.InitializeAsync();
+            _gameOptions = BuildGameOptions();
 
             try
             {
                 var code = await JS.InvokeAsync<string?>("localStorage.getItem", "sad_room");
                 var name = await JS.InvokeAsync<string?>("localStorage.getItem", "sad_name");
-                if (!string.IsNullOrEmpty(code) && !string.IsNullOrEmpty(name))
-                {
-                    _resumeCode = code;
-                    _resumeName = name;
-                }
 
                 if (string.IsNullOrEmpty(GameState.PlayerName) && !string.IsNullOrEmpty(name))
                     GameState.PlayerName = name;
+
+                // Page reload on "/" wipes GameState (Blazor WASM state is in-memory only) even though
+                // the room/name are still in localStorage — creating a room no longer navigates away
+                // (per the "Start Here" modal change), so a plain refresh here used to strand the
+                // player behind a manual "Resume Last Session" click instead of just staying joined.
+                // Silently reconnect first; only fall back to the manual banner if that fails.
+                if (!string.IsNullOrEmpty(code) && !string.IsNullOrEmpty(name) && GameState.PlatformState is null)
+                {
+                    var reconnected = await SilentRejoinAsync(code, name);
+                    if (!reconnected)
+                    {
+                        _resumeCode = code;
+                        _resumeName = name;
+                    }
+                }
             }
             catch { }
         }
@@ -275,6 +297,20 @@
             await InvokeAsync(() => Nav.NavigateTo("/room"));
         else
             await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task<bool> SilentRejoinAsync(string code, string name)
+    {
+        try
+        {
+            await Hub.EnsureConnectedAsync();
+            var result = await Hub.RejoinAsync(code, name);
+            return result.Success;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private void OnResume()
@@ -370,5 +406,6 @@
     public void Dispose()
     {
         Hub.OnGameState -= OnGameState;
+        Settings.OnChange -= OnSettingsChanged;
     }
 }

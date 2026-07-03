@@ -32,6 +32,22 @@
 
                 <div class="border-t border-gray-800"></div>
 
+                <!-- Experimental games toggle -->
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-semibold text-gray-200">Experimental Games</p>
+                        <p class="text-xs text-gray-500 mt-0.5">Show in-progress games (like Protect Thy Fortress) in the picker.</p>
+                    </div>
+                    <button @onclick="ToggleExperimentalGames"
+                            class="relative inline-flex h-6 w-11 flex-shrink-0 rounded-full transition-colors duration-200
+                                   @(Settings.ExperimentalGamesEnabled ? "bg-yellow-400" : "bg-gray-700")">
+                        <span class="inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 mt-0.5
+                                     @(Settings.ExperimentalGamesEnabled ? "translate-x-5" : "translate-x-0.5")"></span>
+                    </button>
+                </div>
+
+                <div class="border-t border-gray-800"></div>
+
                 <!-- Theme easter egg -->
                 <div class="flex items-center justify-between">
                     <div>
@@ -69,6 +85,12 @@
     private async Task ToggleMic()
     {
         await Settings.SetMicEnabledAsync(!Settings.MicEnabled);
+        StateHasChanged();
+    }
+
+    private async Task ToggleExperimentalGames()
+    {
+        await Settings.SetExperimentalGamesEnabledAsync(!Settings.ExperimentalGamesEnabled);
         StateHasChanged();
     }
 

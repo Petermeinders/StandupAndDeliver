@@ -48,7 +48,7 @@ public class StandupGame(GameTimerService gameTimerService, IHubContext<GameHub,
         var activeSpeaker = state.SubPhase == StandupSubPhase.SpeakerTurn
             ? room.Players[state.CurrentSpeakerIndex] : null;
 
-        if (activeSpeaker is not null && activeSpeaker.IsConnected)
+        if (activeSpeaker is not null && activeSpeaker.IsConnected && !activeSpeaker.AwayFromGame)
             await gameTimerService.BroadcastStandupPerClient(room, state, activeSpeaker.ConnectionId);
         else
             await gameTimerService.BroadcastStandupPerClient(room, state, activeSpeaker?.ConnectionId ?? "");
@@ -64,7 +64,7 @@ public class StandupGame(GameTimerService gameTimerService, IHubContext<GameHub,
         var cardText = isActiveSpeaker || state.SubPhase == StandupSubPhase.Results
             ? await gameTimerService.GetActiveCardTextAsync(room.RoomCode) : null;
 
-        var eligible = room.Players.Count(p => p.IsConnected) - 1;
+        var eligible = room.Players.Count(p => p.IsConnected && !p.AwayFromGame) - 1;
         var includeTranscript = state.SubPhase is StandupSubPhase.Voting or StandupSubPhase.Results;
         var dto = new StandupGameStateDto(
             SubPhase: state.SubPhase,
@@ -94,6 +94,22 @@ public class StandupGame(GameTimerService gameTimerService, IHubContext<GameHub,
         if (isActiveSpeaker)
             await gameTimerService.EndTurnAsync(room, state);
         else if (wasHost && state.SubPhase == StandupSubPhase.Results)
+            await gameTimerService.AdvanceToNextTurnAsync(room, state);
+    }
+
+    /// <summary>Host-triggered Drop — same turn-flow cleanup as a grace-period expiry, just
+    /// immediate. Standup has no per-player hand, so there's nothing else to tear down.</summary>
+    public async Task OnPlayerDropped(GameRoom room, string playerName)
+    {
+        if (!_states.TryGetValue(room.RoomCode, out var state)) return;
+
+        var target = room.Players.FirstOrDefault(p => p.Name == playerName);
+        var isActiveSpeaker = state.SubPhase == StandupSubPhase.SpeakerTurn
+            && room.Players[state.CurrentSpeakerIndex].Name == playerName;
+
+        if (isActiveSpeaker)
+            await gameTimerService.EndTurnAsync(room, state);
+        else if (target?.IsHost == true && state.SubPhase == StandupSubPhase.Results)
             await gameTimerService.AdvanceToNextTurnAsync(room, state);
     }
 

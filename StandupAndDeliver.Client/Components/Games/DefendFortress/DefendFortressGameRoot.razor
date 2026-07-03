@@ -2,6 +2,8 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 @using System.Text.Json
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
 
 @{
     var gs = GameState.GetState<DefendFortressGameStateDto>("defend-fortress");
@@ -17,11 +19,11 @@
 {
     <div class="min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-white">
         <p class="text-3xl font-bold">@(gs.ResultMessage ?? "Game Over")</p>
-        <p class="text-gray-400">Fortress HP: @gs.FortressHp / @gs.MaxFortressHp</p>
+        <p class="text-gray-400">Fortress HP: @gs.FortressHp / @gs.FortressMaxHp</p>
         <div class="text-sm text-gray-500 space-y-1 text-center">
             @foreach (var p in gs.Players)
             {
-                <p>@p.Name — @p.Kills kills, @p.Breaches breaches</p>
+                <p>@p.Name — @p.Kills kills, @p.Breaches breaches, @p.Gold gold</p>
             }
         </div>
         <LeaveGameButton />
@@ -29,49 +31,236 @@
     return;
 }
 
-<div class="flex flex-col min-h-screen text-white select-none">
+@if (gs.Phase is "Shop" or "WaveComplete" or "Countdown")
+{
+    <div class="fortress-orientation-gate fortress-landscape-lock min-h-screen flex flex-col items-center gap-4 p-6 text-white">
+        <p class="text-2xl font-bold text-amber-300">@(gs.ResultMessage ?? $"Wave {gs.Wave} cleared!")</p>
+        <p class="text-gray-400">Fortress HP: @gs.FortressHp / @gs.FortressMaxHp</p>
 
-    @* ── Shared stats ticker ── *@
-    <div class="sticky top-12 z-40 bg-gray-950/95 border-b border-amber-900/50 px-3 py-2 space-y-1">
-        <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm font-mono">
-            <span class="text-amber-400">🏰 @gs.FortressHp/@gs.MaxFortressHp HP</span>
-            <span class="text-yellow-300">👾 @gs.TotalEnemiesRemaining total left</span>
-            <span class="text-cyan-300">@gs.ActiveEnemyCount on field</span>
-            <span class="text-gray-400">Wave @gs.Wave</span>
-            <span class="text-emerald-400">ping @_pingMs ms</span>
-            <span class="@(_lastActionMs > 150 ? "text-red-400" : "text-cyan-400")">action @_lastActionMs ms</span>
-            <span class="text-purple-400">sync @_syncAgeMs ms ago</span>
+        @if (gs.Phase == "Countdown")
+        {
+            <p class="text-4xl font-mono text-cyan-300">@Math.Ceiling(gs.CountdownRemaining)</p>
+        }
+
+        <div class="w-full max-w-2xl bg-gray-900/60 rounded-lg border border-amber-900/50 p-4">
+            <p class="text-sm text-gray-400 mb-2">Recap — per player</p>
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-gray-500 text-left">
+                        <th class="pb-1">Player</th>
+                        <th class="pb-1">Kills</th>
+                        <th class="pb-1">Breaches</th>
+                        <th class="pb-1">Flings</th>
+                        <th class="pb-1">Gold</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in gs.Players)
+                    {
+                        <tr class="@(p.Name == GameState.PlayerName ? "text-amber-200" : "text-gray-300")">
+                            <td>@p.Name @(p.IsSpectator ? "(spectating)" : "")</td>
+                            <td>@p.Kills</td>
+                            <td>@p.Breaches</td>
+                            <td>@p.Flings</td>
+                            <td>@p.Gold</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
         </div>
-        <div class="flex flex-wrap justify-center gap-2 text-xs text-gray-500">
-            @foreach (var p in gs.Players)
+
+        @if (gs.Phase == "Shop")
+        {
+            <div class="w-full max-w-2xl bg-gray-900/60 rounded-lg border border-amber-900/50 p-4">
+                <p class="text-sm text-gray-400 mb-3">Shop — spend your own gold (@MyGold gold)</p>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    @foreach (var upgrade in ShopUpgrades)
+                    {
+                        var myTier = MyUpgrades.GetValueOrDefault(upgrade.Id);
+                        var cost = UpgradeCost(upgrade.Id, myTier);
+                        var castleTotal = gs.CastleUpgrades.GetValueOrDefault(upgrade.Id);
+                        <button class="flex flex-col items-start gap-1 rounded-lg border border-amber-800/60 bg-gray-800/70 hover:bg-gray-800 p-3 text-left disabled:opacity-40"
+                                disabled="@(MyGold < cost)"
+                                @onclick="() => BuyUpgrade(upgrade.Id)">
+                            <span class="font-semibold text-amber-200">@upgrade.Name</span>
+                            <span class="text-xs text-gray-400">Your tier: @myTier · Castle total: @castleTotal</span>
+                            <span class="text-sm text-emerald-400">@cost gold</span>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @if (gs.SaveExportAllowed || gs.SaveImportAllowed)
             {
-                <span class="@(p.Name == GameState.PlayerName ? "text-amber-200" : "")">
-                    @p.Name: @p.Kills☠ @p.Breaches💥
-                </span>
+                <div class="flex flex-wrap items-center justify-center gap-3 text-sm">
+                    @if (gs.SaveExportAllowed)
+                    {
+                        <button class="px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600" @onclick="ExportSave">
+                            Download save
+                        </button>
+                    }
+                    @if (IsHost && gs.SaveImportAllowed)
+                    {
+                        <label class="px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 cursor-pointer">
+                            Import save
+                            <InputFile OnChange="OnImportFileSelected" class="hidden" accept=".json" />
+                        </label>
+                    }
+                </div>
+                @if (!string.IsNullOrEmpty(_importError))
+                {
+                    <p class="text-xs text-red-400">@_importError</p>
+                }
             }
-        </div>
-    </div>
 
-    <div class="flex items-center justify-between px-3 py-2 text-xs text-gray-500 gap-2 flex-wrap">
-        <span>Shared battlefield — purple = held by another player</span>
-        <label class="flex items-center gap-2 cursor-pointer text-gray-400 hover:text-gray-300">
-            <input type="checkbox"
-                   class="rounded border-gray-600 bg-gray-800 text-amber-500 focus:ring-amber-500/50"
-                   checked="@_interpolate"
-                   @onchange="OnInterpolateToggle" />
-            <span>Smooth interpolation</span>
-        </label>
+            @* ── Experimental Artillery seat (Phase 3, epic §14) ── *@
+            <div class="flex flex-col items-center gap-1 text-xs text-gray-500">
+                <p>
+                    Artillery: @(string.IsNullOrEmpty(gs.ArtilleryPlayerName) ? "unclaimed" : gs.ArtilleryPlayerName)
+                    <span class="text-gray-600">(experimental — top-down slingshot)</span>
+                </p>
+                <button class="px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200" @onclick="ToggleArtilleryVolunteer">
+                    @(IsArtilleryPlayer ? "Release artillery seat" : "Volunteer for artillery")
+                </button>
+            </div>
+
+            <div class="flex flex-col items-center gap-2">
+                <p class="text-xs text-gray-500">
+                    Ready: @gs.Players.Count(p => p.Ready && !p.IsSpectator)/@gs.Players.Count(p => !p.IsSpectator)
+                </p>
+                <div class="flex gap-3">
+                    <button class="px-5 py-3 rounded-lg font-semibold @(MyReady ? "bg-emerald-600 hover:bg-emerald-500" : "bg-gray-700 hover:bg-gray-600")"
+                            @onclick="ToggleReady">
+                        @(MyReady ? "Ready ✓" : "Ready up")
+                    </button>
+                    <button class="px-5 py-3 rounded-lg bg-amber-600 hover:bg-amber-500 font-semibold disabled:opacity-40"
+                            disabled="@(!IsHost)"
+                            @onclick="StartNextWave">
+                        Force start wave @(gs.Wave + 1) @(IsHost ? "" : "(host only)")
+                    </button>
+                </div>
+            </div>
+        }
+
         <LeaveGameButton />
     </div>
+    return;
+}
 
-    @* ── Canvas combat (server-synced) ── *@
-    <div class="flex-1 px-2 pb-4 min-h-[280px] bg-gray-950" style="height: 55vh">
-        <canvas id="fortress-canvas" class="w-full h-full rounded-lg border border-gray-700 touch-none bg-[#1a1410]"></canvas>
-    </div>
+@* Immersive combat shell — canvas fills the viewport; stats/controls live in a floating HUD. *@
+<div id="fortress-combat-shell" class="fortress-combat-shell text-white select-none @(_hudOpen ? "fortress-hud-open" : "")">
 
-    <p class="text-center text-xs text-gray-600 pb-4 px-4">
-        Toggle interpolation to compare snap vs smooth rendering. Grab hit-testing always uses server positions.
-    </p>
+    @if (IsArtilleryPlayer)
+    {
+        <div class="fortress-combat-view fortress-artillery-gate relative overflow-hidden touch-none @(gs.IsPaused ? "pointer-events-none" : "")"
+             @onpointerdown="OnArtilleryDragStart" @onpointermove="OnArtilleryDragMove" @onpointerup="OnArtilleryDragEnd" @onpointerleave="OnArtilleryDragEnd">
+            @foreach (var e in gs.Enemies)
+            {
+                var (leftPct, topPct) = ArtilleryPosition(e.X, e.Y, gs.WorldWidth, gs.WorldHeight);
+                <div class="absolute w-3 h-3 rounded-full -translate-x-1/2 -translate-y-1/2 @(e.State == "airborne" ? "bg-red-500" : "bg-yellow-400")"
+                     style="left:@(leftPct)%; top:@(topPct)%"></div>
+            }
+            @foreach (var d in gs.Discs)
+            {
+                var (leftPct, topPct) = ArtilleryPosition(d.X, d.Y, gs.WorldWidth, gs.WorldHeight);
+                <div class="absolute w-2 h-2 rounded-full bg-cyan-300 -translate-x-1/2 -translate-y-1/2" style="left:@(leftPct)%; top:@(topPct)%"></div>
+            }
+            @if (gs.IsPaused)
+            {
+                <div class="absolute inset-0 z-10 flex items-center justify-center bg-black/50 pointer-events-none">
+                    <span class="text-2xl font-bold text-amber-300 tracking-widest">PAUSED</span>
+                </div>
+            }
+            <div class="absolute bottom-1 left-1/2 -translate-x-1/2 text-2xl">🏰</div>
+            @if (gs.ArtilleryCooldownRemaining > 0)
+            {
+                <div class="absolute top-2 right-2 text-xs text-gray-400 bg-black/50 rounded px-2 py-1">reloading @gs.ArtilleryCooldownRemaining.ToString("0.0")s</div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="fortress-combat-view fortress-orientation-gate relative min-h-0 min-w-0">
+            <canvas id="fortress-canvas" class="absolute inset-0 w-full h-full touch-none bg-[#1a1410] @(gs.IsPaused ? "opacity-80" : "")"></canvas>
+            @if (gs.IsPaused)
+            {
+                <div class="absolute inset-0 z-10 flex items-center justify-center bg-black/40 pointer-events-none">
+                    <span class="text-2xl font-bold text-amber-300 tracking-widest">PAUSED</span>
+                </div>
+            }
+        </div>
+    }
+
+    @* ── Floating HUD toggle + panel ── *@
+    <button type="button"
+            class="fortress-hud-toggle"
+            title="@(_hudOpen ? "Hide stats" : "Show stats & controls")"
+            aria-expanded="@_hudOpen"
+            @onclick="ToggleHud">
+        @if (gs.IsPaused && !_hudOpen)
+        {
+            <span class="fortress-hud-paused-dot" aria-hidden="true"></span>
+        }
+        <svg class="fortress-hud-chevron @(_hudOpen ? "is-open" : "")" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+    </button>
+
+    @if (_hudOpen)
+    {
+        <div class="fortress-hud-panel" @onclick:stopPropagation="true">
+            <div class="px-3 py-2 space-y-1 border-b border-amber-900/40">
+                <div class="flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 text-xs font-mono">
+                    <span class="text-amber-400">🏰 @gs.FortressHp/@gs.FortressMaxHp HP</span>
+                    <span class="text-yellow-300">👾 @gs.TotalEnemiesRemaining left</span>
+                    <span class="text-cyan-300">@gs.ActiveEnemyCount on field</span>
+                    <span class="text-gray-400">Wave @gs.Wave@(gs.VictoryWave > 0 ? $"/{gs.VictoryWave}" : "")</span>
+                    <span class="text-emerald-400">💰 @MyGold</span>
+                    <span class="text-emerald-400">ping @_pingMs ms</span>
+                    <span class="@(_lastActionMs > 150 ? "text-red-400" : "text-cyan-400")">action @_lastActionMs ms</span>
+                    <span class="text-purple-400">sync @_syncAgeMs ms</span>
+                </div>
+                <div class="flex gap-2 text-[11px] text-gray-500 overflow-x-auto whitespace-nowrap pb-1">
+                    @foreach (var p in gs.Players)
+                    {
+                        <span class="shrink-0 @(p.Name == GameState.PlayerName ? "text-amber-200" : "")">
+                            @p.Name: @p.Kills☠ @p.Breaches💥
+                        </span>
+                    }
+                </div>
+            </div>
+            <div class="flex items-center justify-between px-3 py-2 text-xs text-gray-500 gap-2 flex-wrap">
+                <span class="truncate min-w-0">
+                    @if (gs.IsPaused)
+                    {
+                        <span class="text-amber-300 font-semibold">⏸ Paused@(gs.PausedBy is { } pb ? $" by {pb}" : "")</span>
+                    }
+                    else
+                    {
+                        <span>Purple = held by another player</span>
+                    }
+                </span>
+                <div class="flex items-center gap-3 shrink-0">
+                    @if (!IsSpectator)
+                    {
+                        <button type="button"
+                                class="flex items-center gap-1.5 px-2 py-1 rounded-md border border-gray-700 bg-gray-800/80 text-gray-300 hover:text-white hover:bg-gray-700 transition-all"
+                                @onclick="TogglePause">
+                            @(gs.IsPaused ? "▶ Resume" : "⏸ Pause")
+                        </button>
+                    }
+                    <label class="flex items-center gap-2 cursor-pointer text-gray-400 hover:text-gray-300">
+                        <input type="checkbox"
+                               class="rounded border-gray-600 bg-gray-800 text-amber-500 focus:ring-amber-500/50"
+                               checked="@_interpolate"
+                               @onchange="OnInterpolateToggle" />
+                        <span>Smooth</span>
+                    </label>
+                    <LeaveGameButton />
+                </div>
+            </div>
+        </div>
+    }
 </div>
 
 @code {
@@ -87,8 +276,184 @@
     private CancellationTokenSource? _pingCts;
     private int _lastServerTick = -1;
     private bool _interpolate;
+    private bool _hudOpen;
+
+    private void ToggleHud() => _hudOpen = !_hudOpen;
 
     private static readonly JsonSerializerOptions CamelJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+    private static readonly (string Id, string Name)[] ShopUpgrades =
+    [
+        ("archer", "Hire Archer"),
+        ("wall", "Reinforce Wall"),
+        ("repair", "Mason's Blessing"),
+        ("soldier", "Gate Soldier"),
+        ("ballista", "Ballista"),
+    ];
+
+    private int MyGold =>
+        GameState.GetState<DefendFortressGameStateDto>(GameType)?.Players
+            .FirstOrDefault(p => p.Name == GameState.PlayerName)?.Gold ?? 0;
+
+    private IReadOnlyDictionary<string, int> MyUpgrades =>
+        GameState.GetState<DefendFortressGameStateDto>(GameType)?.Players
+            .FirstOrDefault(p => p.Name == GameState.PlayerName)?.Upgrades
+        ?? new Dictionary<string, int>();
+
+    private bool IsHost =>
+        GameState.PlatformState?.Players.FirstOrDefault(p => p.Name == GameState.PlayerName)?.IsHost ?? false;
+
+    private bool IsArtilleryPlayer =>
+        GameState.GetState<DefendFortressGameStateDto>(GameType)?.ArtilleryPlayerName == GameState.PlayerName;
+
+    private bool IsSpectator =>
+        GameState.GetState<DefendFortressGameStateDto>(GameType)?.Players
+            .FirstOrDefault(p => p.Name == GameState.PlayerName)?.IsSpectator ?? false;
+
+    private async Task TogglePause()
+    {
+        await GameActionFunc("TogglePause", null);
+        StateHasChanged();
+    }
+
+    private async Task ToggleArtilleryVolunteer()
+    {
+        await GameActionFunc("VolunteerArtillery", null);
+        StateHasChanged();
+    }
+
+    /// <summary>Reframes the shared side-view sim into a rough top-down projection (epic §14):
+    /// depth-toward-castle (enemy.X, 0=spawn..castleX=gate) becomes the vertical axis (top=far,
+    /// bottom=castle), and the side-view lane (enemy.Y) becomes horizontal. This is a simplified
+    /// mapping — there's no separate top-down simulation, just a different read of the same coords.</summary>
+    private static (double LeftPct, double TopPct) ArtilleryPosition(float x, float y, float worldWidth, float worldHeight)
+    {
+        var leftPct = 100.0 * y / worldHeight;
+        var topPct = 100.0 * x / worldWidth;
+        return (Math.Clamp(leftPct, 0, 100), Math.Clamp(topPct, 0, 100));
+    }
+
+    private bool _artilleryDragging;
+    private (double X, double Y) _artilleryDragStart;
+
+    private void OnArtilleryDragStart(PointerEventArgs e)
+    {
+        _artilleryDragging = true;
+        _artilleryDragStart = (e.OffsetX, e.OffsetY);
+    }
+
+    private void OnArtilleryDragMove(PointerEventArgs e)
+    {
+        // Aim preview could be drawn here; kept minimal (no separate aim-line render) for this pass.
+    }
+
+    private async Task OnArtilleryDragEnd(PointerEventArgs e)
+    {
+        if (!_artilleryDragging) return;
+        _artilleryDragging = false;
+
+        var dx = e.OffsetX - _artilleryDragStart.X;
+        var dy = e.OffsetY - _artilleryDragStart.Y;
+        var dragDistance = Math.Sqrt(dx * dx + dy * dy);
+        if (dragDistance < 8) return; // treat as a tap, not a drag
+
+        // Fire back along the drag direction (slingshot pull-back), mapped from screen space
+        // (top-down: down=toward castle) back into the shared world's angle convention (0=+X/toward castle).
+        var angle = Math.Atan2(-dx, dy);
+        var power = (float)Math.Clamp(dragDistance / 150.0, 0.2, 1.0);
+
+        await GameActionFunc("FireSlingshot", JsonSerializer.Serialize(new { angle = (float)angle, power }));
+        StateHasChanged();
+    }
+
+    private bool MyReady =>
+        GameState.GetState<DefendFortressGameStateDto>(GameType)?.Players
+            .FirstOrDefault(p => p.Name == GameState.PlayerName)?.Ready ?? false;
+
+    private async Task ToggleReady()
+    {
+        await GameActionFunc("ReadyForWave", JsonSerializer.Serialize(new { ready = !MyReady }));
+        StateHasChanged();
+    }
+
+    /// <summary>Mirrors DefendFortressGame.UpgradeCost — server is authoritative, this is display-only.</summary>
+    private static int UpgradeCost(string upgradeId, int currentTier)
+    {
+        var baseCost = upgradeId switch
+        {
+            "archer" => 100,
+            "wall" => 200,
+            "repair" => 75,
+            "soldier" => 150,
+            "ballista" => 300,
+            _ => 100
+        };
+        return (int)Math.Ceiling(baseCost * (1 + 0.5 * currentTier));
+    }
+
+    private async Task BuyUpgrade(string upgradeId)
+    {
+        await GameActionFunc("PurchaseUpgrade", JsonSerializer.Serialize(new { upgradeId }));
+        StateHasChanged();
+    }
+
+    private async Task StartNextWave()
+    {
+        await GameActionFunc("StartNextWave", null);
+        StateHasChanged();
+    }
+
+    private string? _importError;
+
+    /// <summary>Export is client-side: the server already synced this DTO to us, so we just
+    /// reshape it into the epic §13 save schema and trigger a browser download.</summary>
+    private async Task ExportSave()
+    {
+        var gs = GameState.GetState<DefendFortressGameStateDto>(GameType);
+        if (gs is null) return;
+
+        var save = new
+        {
+            schemaVersion = 1,
+            gameType = GameType,
+            displayName = "Protect Thy Fortress",
+            savedAt = DateTimeOffset.UtcNow,
+            roomCode = GameState.PlatformState?.RoomCode,
+            wave = gs.Wave,
+            nextWave = gs.Wave + 1,
+            fortressHp = gs.FortressHp,
+            fortressMaxHp = gs.FortressMaxHp,
+            gold = gs.Players.FirstOrDefault(p => p.Name == GameState.PlayerName)?.Gold ?? 0,
+            rngSeed = 0, // deterministic replay not implemented yet — see PTF-2.1 story notes
+            gameMode = gs.GameMode,
+            castleUpgrades = gs.CastleUpgrades,
+            players = gs.Players.Select(p => new { p.Name, p.Kills, p.Breaches, p.Gold }),
+        };
+
+        var json = JsonSerializer.Serialize(save, new JsonSerializerOptions { WriteIndented = true });
+        var filename = $"protect-thy-fortress-wave{gs.Wave}-{DateTime.UtcNow:yyyyMMdd-HHmmss}.json";
+        await JS.InvokeVoidAsync("fortressInterop.downloadJson", filename, json);
+    }
+
+    private async Task OnImportFileSelected(InputFileChangeEventArgs e)
+    {
+        _importError = null;
+        try
+        {
+            using var stream = e.File.OpenReadStream(maxAllowedSize: 64 * 1024); // NFR-PTF-4: saves stay well under 50KB
+            using var reader = new StreamReader(stream);
+            var content = await reader.ReadToEndAsync();
+
+            var payload = JsonSerializer.Serialize(new { saveJson = content });
+            var result = await GameActionFunc("ImportSave", payload);
+            if (!result.Success) _importError = result.Error ?? "Import failed.";
+        }
+        catch (Exception ex)
+        {
+            _importError = $"Could not read file: {ex.Message}";
+        }
+        StateHasChanged();
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -100,7 +465,14 @@
         }
 
         var gs = GameState.GetState<DefendFortressGameStateDto>(GameType);
-        if (gs is null || gs.Phase == "GameOver") return;
+
+        if (_canvasStarted && (gs is null || gs.Phase != "WavePlaying" || IsArtilleryPlayer))
+        {
+            await JS.InvokeVoidAsync("fortressInterop.stop", CanvasId);
+            _canvasStarted = false;
+        }
+
+        if (gs is null || gs.Phase != "WavePlaying" || IsArtilleryPlayer) return;
 
         if (!_canvasStarted && _dotNetRef is not null)
         {
@@ -122,6 +494,9 @@
             var enemiesJson = JsonSerializer.Serialize(gs.Enemies, CamelJson);
             await JS.InvokeVoidAsync("fortressInterop.syncState", CanvasId, enemiesJson, gs.WorldWidth, gs.WorldHeight);
         }
+
+        if (_canvasStarted)
+            await JS.InvokeVoidAsync("fortressInterop.setPaused", CanvasId, gs.IsPaused);
     }
 
     private int _syncAgeMs;
