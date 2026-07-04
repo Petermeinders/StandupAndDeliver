@@ -3,12 +3,10 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy project files first for layer caching on restore
-COPY StandupAndDeliver.sln ./
 COPY StandupAndDeliver/StandupAndDeliver.csproj StandupAndDeliver/
 COPY StandupAndDeliver.Client/StandupAndDeliver.Client.csproj StandupAndDeliver.Client/
 COPY StandupAndDeliver.Shared/StandupAndDeliver.Shared.csproj StandupAndDeliver.Shared/
-COPY StandupAndDeliver.Tests/StandupAndDeliver.Tests.csproj StandupAndDeliver.Tests/
-RUN dotnet restore
+RUN dotnet restore StandupAndDeliver/StandupAndDeliver.csproj
 
 # Copy remaining source
 COPY . .
