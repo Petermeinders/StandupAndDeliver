@@ -427,6 +427,10 @@ body.theme-w95 .overflow-hidden {
     background: linear-gradient(160deg, #312e81 0%, #1e1b4b 40%, #14532d 100%);
 }
 
+.game-carousel-fallback--spellbound {
+    background: linear-gradient(160deg, #4c1d95 0%, #1e1b4b 45%, #701a75 100%);
+}
+
 .game-carousel-image,
 .game-carousel-fallback {
     position: absolute;
