@@ -1,0 +1,22 @@
+{
+  "name": "@arcade/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts --dev",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/index.js --packages=external --alias:@arcade/shared=../shared/src/index.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.25.0",
+    "socket.io-client": "^4.8.1",
+    "tsx": "^4.19.0",
+    "vitest": "^3.0.0"
+  }
+}

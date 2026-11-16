@@ -1,0 +1,1 @@
+{ "extends": "../tsconfig.base.json", "compilerOptions": { "types": ["node"], "baseUrl": "..", "paths": { "@arcade/shared": ["./shared/src/index.ts"] } }, "include": ["src", "test", "../shared/src"] }
