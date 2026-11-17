@@ -1,0 +1,24 @@
+{
+  "name": "fireside-arcade",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c yellow,cyan \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w client && npm run build -w server",
+    "start": "node server/dist/index.js",
+    "test": "npm run test -w server",
+    "previews": "node tools/record-previews.mjs",
+    "typecheck": "tsc -p server --noEmit && tsc -p client --noEmit",
+    "test:fortress:browser": "node tools/fortress-browser.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "playwright": "^1.65.1",
+    "typescript": "^5.7.0"
+  }
+}
